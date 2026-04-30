@@ -93,8 +93,15 @@ APP_MAIN_LOG="${APP_HOME}atlassian-jira-perf.log"
 APP_MAIN_LOG="${APP_HOME}atlassian-jira.log"
 JIRA_SLOW_JQL="${APP_HOME}atlassian-jira-slow-queries.log"
 
+#catalinaLogName=$(basename "$CATALINA_LOG")
+#appLogName=$(basename "$APP_MAIN_LOG")
+catalinaLogName="${CATALINA_LOG##*/}"
+appLogName="${APP_MAIN_LOG##*/}"
+jiraSlowJql="${JIRA_SLOW_JQL##*/}"
+
 REPORTS="/media/user/Storage/lenovo-storage/@Mobile/@Wiki/Projects/@Java/@Jira/temp_collection_of_scripts_to_be_sorted/bash/tmp/seismo_FailureRCAnalysis_$(date +%Y%m%d-%H%M%S)/"
 SeismoRCAReportLog="${REPORTS}seismoRCAReport.log"
+
 #sudo su - user
 #rm ${SeismoRCAReportLog}
 mkdir -p "${REPORTS}"
@@ -109,6 +116,32 @@ mkdir -p "${REPORTS}"
 #APP_MAIN_LOG="${APP_HOME}atlassian-confluence.log" #PAT
 #SeismoRCAReportLog="seismoRCAReport.log" #PAT
 
+#LogNames="${CATALINA_LOG}"
+LogNames="" #--Reset the logs list
+FilterOR="[[:space:]]+(WARNING|ERROR|FATAL|SEVERE|CRITICAL)[[:space:]]+"
+FilterOR+="|StuckThreadDetected"
+StartDate="2026-01-07"
+EndDate="2026-02-10"
+echo "~~SeismoGraph: [${CATALINA_LOG##*/}${StartDate}.log .. ${CATALINA_LOG##*/}${EndDate}.log], Filter:${FilterOR}" >> ${SeismoRCAReportLog}
+RollingDay=${StartDate}
+EndComparison=$(date -d "${EndDate} + 1 day" +%Y-%m-%d)
+while [ "${RollingDay}" != "$EndComparison" ]; do
+    LogFile="${CATALINA_LOG}${RollingDay}.log"
+    if [ -f "$LogFile" ]; then
+        #echo "Found: $LogFile"
+        LogNames+=" $LogFile"
+    #else
+        #echo "Missing: $LogFile" >&2
+    fi
+    RollingDay=$(date -d "${RollingDay} + 1 day" +%Y-%m-%d)
+done
+
+#LogEntryStartDate="07-Jan-2026 00:00"
+#LogEntryEndDate="10-Feb-2026 00:00"
+awk '$1 " " $2 >= "07-Jan-2026 00:00" && $1 " " $2 <= "10-Feb-2026 00:00"' ${LogNames} | grep -E ${FilterOR} | sort | cut -c 1-17 | uniq -c | awk '{printf "%s %s   %s ", $2, $3, $1; for(i=0; i<$1/10; i++) printf "*"; print ""}' >> ${SeismoRCAReportLog}
+
+
+
 ##--Conat log files:
 LogNamesArr=("${APP_MAIN_LOG}")
 LogNames="${LogNamesArr[0]}"
@@ -116,43 +149,16 @@ for ((i=1; i<11; i++)); do
     if [[ -f "${APP_MAIN_LOG}.${i}" ]]; then
 	    LogNamesArr+=("${APP_MAIN_LOG}.${i}")
 	    LogNames+=" ${LogNamesArr[i]}" #--Add space between file names
-    else
-        echo "Warning: file ${APP_MAIN_LOG}.${i} not found" >&2
+    #else
+        #echo "Warning: file ${APP_MAIN_LOG}.${i} not found" >&2
     fi
 done
 #echo "${LogNames}"
-
-#LogNames="${CATALINA_LOG}"
-StartDate="2026-04-01"
-EndDate="2026-05-01"
-RollingDay=${StartDate}
-EndComparison=$(date -d "${EndDate} + 1 day" +%Y-%m-%d)
-while [ "${RollingDay}" != "$EndComparison" ]; do
-    LogFile="${CATALINA_LOG}${RollingDay}.log"
-    if [ -f "$LogFile" ]; then
-        echo "Found: $LogFile"
-        LogNames+=" $LogFile"
-    else
-        echo "Missing: $LogFile" >&2
-    fi
-    RollingDay=$(date -d "${RollingDay} + 1 day" +%Y-%m-%d)
-done
-
-
-
-FilterOR="[[:space:]]+(ERROR|FATAL|SEVERE|CRITICAL)[[:space:]]+"
-awk '$1 " " $2 >= "2020-02-00 00:00" && $1 " " $2 <= "2026-05-31 00:00"' ${LogNames} | grep -E "${FilterOR}" | sort | cut -c 1-16 | uniq -c | awk '{printf "%s %s   %s ", $2, $3, $1; for(i=0; i<$1/10; i++) printf "*"; print ""}' >> ${SeismoRCAReportLog}
-
 
 
 exit 0
 #todo: HTTP/1.1" 200
 
-#catalinaLogName=$(basename "$CATALINA_LOG")
-#appLogName=$(basename "$APP_MAIN_LOG")
-catalinaLogName="${CATALINA_LOG##*/}"
-appLogName="${APP_MAIN_LOG##*/}"
-jiraSlowJql="${JIRA_SLOW_JQL##*/}"
 
 declare -A keywordsMap
 #keywordsMap=(["Atlassian-errors"]="[[:space:]]+(ERROR|FATAL|SEVERE|CRITICAL)[[:space:]]+" ["Exceptions"]="[A-Za-z0-9\.]+Exception")
