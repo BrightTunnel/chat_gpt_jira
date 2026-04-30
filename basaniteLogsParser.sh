@@ -1,12 +1,28 @@
 #!/bin/bash
 #--Jira Node Failure Root Cause Analyzer. Scans jira + catalina logs for fatal patterns
-#--Basanite by Valeri Tikhonov, TD, April 2026.
+#--Seismo by Valeri Tikhonov, TD, April 2026.
+
+##--https://confluence.atlassian.com/doc/working-with-confluence-logs-108364721.html --DC 10.2
+##--https://confluence.atlassian.com/doc/configuring-logging-181535215.html
+
 ##--https://confluence.atlassian.com/jirakb/useful-log-files-in-jira-data-center-1027120387.html
 #--The log files with a star "*" in the end indicate that the logs roll over. For example, the latest file is atlassian-jira.log, then atlassian-jira.log.1, then atlassian-jira.log.2 and so on.
-#JIRA_INSTALL/logs
+
+#JIRA_INSTALL|CONF_INSTALL/logs
+	#catalina.out --"live" stream of the server's console output. Anything the application prints to the terminal (Standard Out/Error) goes here. On Linux, this file can grow indefinitely because Tomcat itself doesn't always rotate it.
+	#catalina.YYYY-mm-dd.log --Tomcat application server process stdout. This file isn't managed by Jira's logging solution log4j, so the format of entries here varies. OutOfMemoryError is logged here.
+	#catalina.2026-04-23.log --When Java runs out of memory (Heap space), the JVM crashes so hard that it usually cannot process the error through Jira's fancy logging system.
 	#access_log.YYYY-mm-dd --HTTP access log (Tomcat), A list of each request that Jira node completed processing. Logged by the Tomcat application server
-	#catalina.out, catalina.YYYY-mm-dd.log --Tomcat application server process stdout. This file isn't managed by Jira's logging solution log4j, so the format of entries here varies. OutOfMemoryError is logged here.
+		#127.0.0.1 446x5x1 localadmin [18/Jun/2025:07:26:47 -0400] "GET /rest/api/latest/filter/10002- HTTP/1.1" 200 1675 23 "-" "Java/21.0.7" "633cxh"
+		#127.0.0.1 446x6x1 localadmin [18/Jun/2025:07:26:47 -0400] "GET /rest/api/latest/filter/10003- HTTP/1.1" 400 149 26 "-" "Java/21.0.7" "12goipt"
+	#conf_access_log.2026-04-23.log
 	#atlassian-jira-gc-YYYY-mm-dd_hh-mm-ss.log.* --Garbage collection log, by JVM, Java heap memory management, and what memory is in use. Out of memory errors or memory contention problems.
+	#gc-2026-04-23_10-11-52.log
+	#gc-2026-04-23_10-11-52.log.4
+	#atlassian-synchrony-proxy.log
+	#synchrony-proxy-watchdog.log
+	#host-manager.2026-04-23.log
+	#manager.2026-04-23.log
 #JIRA_HOME/log
 	#atlassian-jira.log* --Primary Jira log file, Generic log location, including logs that aren’t specifically directed elsewhere
 	#atlassian-jira-perf.log* --Performance statistics. A variety of useful performance metrics about the application and underlying system, for example, database latency, tomcat thread pool utilisation, system/process CPU consumption, and DBCP (database connection) pool utilisation
@@ -26,6 +42,28 @@
 	#atlassian-jira-http-dump.log* --HTTP dump log (Jira). An extremely verbose HTTP dump log, written by Jira. Only written if HTTP dump logging is enabled. Due to the risk to performance, we don't recommend enabling Jira's access log in enterprise scale production instances. 
 	#atlassian-jira-incoming-mail.log* --Incoming mail. Incoming mail debug log. Only written to if Incoming Mail Debug is enabled
 	#atlassian-jira-outgoing-mail.log* --Outgoing mail. Outgoing mail debug log. Only written to if Outgoing Mail Debug is enabled
+#CONF_HOME/logs
+	#atlassian-confluence-app-monitoring.log
+	#atlassian-confluence-app-monitoring.log.5
+	#atlassian-confluence-health-checks.log
+	#atlassian-confluence-index.log
+	#atlassian-confluence-index.log.5
+	#atlassian-confluence-ipd-monitoring.log
+	#atlassian-confluence-ipd-monitoring.log.5
+	#atlassian-confluence-jmx.log
+	#atlassian-confluence-jmx.log.5
+	#atlassian-confluence-migration.log.5
+	#atlassian-confluence-outgoing-mail.log
+	#atlassian-confluence-profiler.log
+	#atlassian-confluence-profiler.log.20
+	#atlassian-confluence-security.log
+	#atlassian-confluence-security.log.5
+	#atlassian-confluence-sql.log
+	#atlassian-confluence.log
+	#atlassian-confluence.log.5
+	#atlassian-diagnostics.log
+	#atlassian-synchrony.log
+	
 #JIRA_HOME/log/audit
 	#YYYYmmdd.00000.audit.log --Audit logging. Filesystem historical logging of audit data
 #JIRA_HOME/log/jfr
@@ -34,56 +72,78 @@
 #JIRA_INSTALL/.install4j
 	#installation.log --Jira installer logs. Records all the steps performed by the Jira Installer binary. Not applicable when Jira is installed manually via tgz file or container
 
-CONF_INSTALL="${1:-/media/user/Storage/@jira_logs_copy/jira_sys/logs/}"
-CONF_HOME="${2:-/media/user/Storage/@jira_logs_copy/logsamples/home_logs/}"
-CONF_HOME_AUDIT="${JIRA_HOME}audit/"
-CONF_HOME_JFR="${JIRA_HOME}jfr/"
+##--Root Folders
+APP_INSTALL="/opt/atlassian/jira/install/logs/" #e.g.:catalina.out
+APP_INSTALL="/opt/atlassian/confluence/install/logs/" #PAT
+APP_INSTALL="${1:-/media/user/Storage/@jira_logs_copy/jira_sys/logs/}"
 
-JIRA_INSTALL="${1:-/media/user/Storage/@jira_logs_copy/jira_sys/logs/}"
-JIRA_HOME="${2:-/media/user/Storage/@jira_logs_copy/logsamples/home_logs/}"
-JIRA_HOME_AUDIT="${JIRA_HOME}audit/"
-JIRA_HOME_JFR="${JIRA_HOME}jfr/"
-#--Logs
-#JIRA_LOG=${1:-/home/user/atlassian-jira-home/log/atlassian-jira.log}
+APP_HOME="/opt/atlassian/jira/home/logs/" #e.g.:atlassian-confluence.log*
+APP_HOME="/opt/atlassian/confluence/home/logs/" #PAT
+APP_HOME="${2:-/media/user/Storage/@jira_logs_copy/jira_home/log/}"
+
+JIRA_HOME_AUDIT="${APP_HOME}audit/"
+JIRA_HOME_JFR="${APP_HOME}jfr/"
+
+##--Logs:
+#APP_MAIN_LOG=${1:-/home/user/atlassian-jira-home/log/atlassian-jira.log}
 #CATALINA_LOG=${2:-/home/user/atlassian-jira-software/logs/catalina.out}
-CATALINA_LOG="${JIRA_INSTALL}catalina.out"
-JIRA_LOG="${JIRA_HOME}atlassian-jira.log"
-JIRA_SLOW_JQL="${JIRA_HOME}atlassian-jira-slow-queries.log"
-# ./media/user/Storage/lenovo-storage/@Mobile/@Wiki/Projects/@Java/@Jira/temp_collection_of_scripts_to_be_sorted/bash/basaniteLogs.sh #--RUN
-REPORTS="/media/user/Storage/lenovo-storage/@Mobile/@Wiki/Projects/@Java/@Jira/temp_collection_of_scripts_to_be_sorted/bash/tmp/basanite_FailureRCAnalysis_$(date +%Y%m%d-%H%M%S)"
-mkdir -p $REPORTS
+CATALINA_LOG="${APP_INSTALL}catalina.out"
+APP_MAIN_LOG="${APP_HOME}atlassian-confluence.log" #PAT
+APP_MAIN_LOG="${APP_HOME}atlassian-jira-perf.log"
+APP_MAIN_LOG="${APP_HOME}atlassian-jira.log"
+JIRA_SLOW_JQL="${APP_HOME}atlassian-jira-slow-queries.log"
+
+REPORTS="/media/user/Storage/lenovo-storage/@Mobile/@Wiki/Projects/@Java/@Jira/temp_collection_of_scripts_to_be_sorted/bash/tmp/seismo_FailureRCAnalysis_$(date +%Y%m%d-%H%M%S)/"
+SeismoRCAReportLog="${REPORTS}seismoRCAReport.log"
 #sudo su - user
-#jiraLogName=$(basename "$JIRA_LOG")
+#rm ${SeismoRCAReportLog}
+mkdir -p "${REPORTS}"
+
+
+
+
+##--PAT:
+#APP_HOME="/opt/atlassian/confluence/home/logs/" #PAT
+#APP_MAIN_LOG="${APP_HOME}atlassian-confluence.log" #PAT
+#SeismoRCAReportLog="seismoRCAReport.log" #PAT
+
+##--Conat log files:
+JiraHomeLogs=("${APP_MAIN_LOG}")
+JiraHomeLogsString="${JiraHomeLogs[0]}"
+for ((i=1; i<11; i++)); do
+    if [[ -f "${APP_MAIN_LOG}.${i}" ]]; then
+	    JiraHomeLogs+=("${APP_MAIN_LOG}.${i}")
+	    JiraHomeLogsString+=" ${JiraHomeLogs[i]}" #--Add space between file names
+    else
+        echo "Warning: file ${APP_MAIN_LOG}.${i} not found" >&2
+    fi
+done
+#echo "${JiraHomeLogsString}"
+FilterOR="[[:space:]]+(ERROR|FATAL|SEVERE|CRITICAL)[[:space:]]+"
+awk '$1 " " $2 >= "2020-02-00 00:00" && $1 " " $2 <= "2026-05-31 00:00"' ${JiraHomeLogsString} | grep -E "${FilterOR}" | sort | cut -c 1-16 | uniq -c | awk '{printf "%s %s   %s ", $2, $3, $1; for(i=0; i<$1/10; i++) printf "*"; print ""}' >> ${SeismoRCAReportLog}
+
+
+
+
+
+
+exit 0
+#todo: HTTP/1.1" 200
+
 #catalinaLogName=$(basename "$CATALINA_LOG")
-jiraLogName="${JIRA_LOG##*/}"
-jiraSlowJql="${JIRA_SLOW_JQL##*/}"
+#appLogName=$(basename "$APP_MAIN_LOG")
 catalinaLogName="${CATALINA_LOG##*/}"
-
-#--Use Linear Array example:
-#keywordsArr=("word1" "word2")
-#keywordsArr+=("word3")
-#1. for keyword in ${keywordsArr[@]}
-#2. for i in ${!keywordsArr[@]}
-#3. length=${#keywordsArr[@]}
-#3. for ((i=0; i<length; i++)); do
-#	echo -e "\n~~$i. ${keywordsArr[$i]}~~" >> $BasaniteRCAReportLog #--SubHeader/Filter
-#	grep -E ${keywordsArr[$i]} $JIRA_LOG >> $BasaniteRCAReportLog #--Log extract
-#done
-
-#2026-04-23 15:34:53,722-0400
-#2026-04-23 15:35:07,600-0400 
-DateRange="^2026-04-23[[:space:]]15:3[45]"
-DateRange="^2026-04-[0-3]"
-BasaniteRCAReportLog="$REPORTS/BasaniteRCAReport.log"
+appLogName="${APP_MAIN_LOG##*/}"
+jiraSlowJql="${JIRA_SLOW_JQL##*/}"
 
 declare -A keywordsMap
 #keywordsMap=(["Atlassian-errors"]="[[:space:]]+(ERROR|FATAL|SEVERE|CRITICAL)[[:space:]]+" ["Exceptions"]="[A-Za-z0-9\.]+Exception")
-keywordsMap["${jiraLogName}, Atlassian-errors"]="[[:space:]]+(ERROR|FATAL|SEVERE|CRITICAL)[[:space:]]+"
-keywordsMap["${jiraLogName}, Exceptions"]="[A-Za-z0-9\.]+Exception"
+keywordsMap["${appLogName}, Atlassian-errors"]="[[:space:]]+(ERROR|FATAL|SEVERE|CRITICAL)[[:space:]]+"
+keywordsMap["${appLogName}, Exceptions"]="[A-Za-z0-9\.]+Exception"
 keywordsMap["${jiraSlowJql}, Slow JQL"]="took[[:space:]][0-9]+[[:space:]]ms|Slow[[:space:]]request"
-keywordsMap["${jiraLogName}, SlowRESTRequests"]="Request.*took|Slow[[:space:]]request" # Detect request timeout / slow endpoints
+keywordsMap["${appLogName}, SlowRESTRequests"]="Request.*took|Slow[[:space:]]request" # Detect request timeout / slow endpoints
 keywordsMap["Cluster-health"]="Cluster.*lost|node.*not[[:space:]]responding|heartbeat|split[[:space:]]brain"
-keywordsMap["JvmOutOfMemory"]="OutOfMemoryError" #JVM memory failures
+keywordsMap["JvmOutOfMemory"]="OutOfMemoryError" #JVM memory (Heap space) failures 
 keywordsMap["DatabaseFailures"]="connection.*fail|database.*down|PSQLException|SQLTransientConnectionException"
 keywordsMap["PluginFailures"]="Plugin.*failed|Unable[[:space:]]to[[:space:]]start[[:space:]]plugin|OSGi|Spring[[:space:]]context[[:space:]]failed"
 keywordsMap["ThreadPoolStarvation"]="Thread.*blocked|StuckThread|thread[[:space:]]starvation"
@@ -93,24 +153,23 @@ keywordsMap["NodeShutdownTrigger"]="Shutdown|Stopping[[:space:]]Jira|Jira[[:spac
 declare -A keywordsMapPiped
 #keywordsMapPiped[""]=""
 
+DateRange="^2026-04-23[[:space:]]15:3[45]"
 for keyword in "${!keywordsMap[@]}"; do
-	echo -e "\n~~cat: $keyword: ${keywordsMap[$keyword]}" >> $BasaniteRCAReportLog #--SubHeader/Filter
-	grep -E $DateRange $JIRA_LOG | grep -hE ${keywordsMap[$keyword]} >> $BasaniteRCAReportLog
-	echo -e "\n~~cat: $keyword: ${keywordsMap[$keyword]}" >> $BasaniteRCAReportLog #--SubHeader/Filter
-	grep -E $DateRange $CATALINA_LOG | grep -hE ${keywordsMap[$keyword]} >> $BasaniteRCAReportLog
+	echo -e "\n~~cat: $keyword: ${keywordsMap[$keyword]}" >> $SeismoRCAReportLog #--SubHeader/Filter
+	grep -E $DateRange $APP_MAIN_LOG | grep -hE ${keywordsMap[$keyword]} >> $SeismoRCAReportLog
+	echo -e "\n~~cat: $keyword: ${keywordsMap[$keyword]}" >> $SeismoRCAReportLog #--SubHeader/Filter
+	grep -E $DateRange $CATALINA_LOG | grep -hE ${keywordsMap[$keyword]} >> $SeismoRCAReportLog
 done
 
 ##--Detect thread explosion, thread growth
-echo -e "\n~~cat: ThreadExplosion" >> $BasaniteRCAReportLog
-grep -E $DateRange $CATALINA_LOG | grep -E "http-nio|http-bio|ThreadPoolExecutor" | grep -E "max[[:space:]]threads|busy[[:space:]]threads|stuck[[:space:]]thread" >> $BasaniteRCAReportLog
+echo -e "\n~~cat: ThreadExplosion" >> $SeismoRCAReportLog
+grep -E $DateRange $CATALINA_LOG | grep -E "http-nio|http-bio|ThreadPoolExecutor" | grep -E "max[[:space:]]threads|busy[[:space:]]threads|stuck[[:space:]]thread" >> $SeismoRCAReportLog
 
-
-echo -e "\n~~cat: LoadBalancerHealthCheck" >> $BasaniteRCAReportLog
-grep -E "healthcheck|status|heartbeat" $JIRA_LOG | grep -E "fail|timeout|unreachable" >> $BasaniteRCAReportLog
-
+echo -e "\n~~cat: LoadBalancerHealthCheck" >> $SeismoRCAReportLog
+grep -E "healthcheck|status|heartbeat" $APP_MAIN_LOG | grep -E "fail|timeout|unreachable" >> $SeismoRCAReportLog
 
 ##--Top exceptions summary
-grep -E $DateRange $JIRA_LOG | grep -oE "[A-Za-z0-9\.]+Exception" | sort | uniq -c | sort -nr | head -10 >> $REPORTS/BasaniteRCAtopExceptions.log
+grep -E $DateRange $APP_MAIN_LOG | grep -oE "[A-Za-z0-9\.]+Exception" | sort | uniq -c | sort -nr | head -10 >> "${}SeismoRCAtopExceptions.log"
 
 
 #--The "Quick Peak"
@@ -119,14 +178,15 @@ grep -E $DateRange $JIRA_LOG | grep -oE "[A-Za-z0-9\.]+Exception" | sort | uniq 
 #--cut -c 1-16: Clips the first 16 characters of the line (2026-04-29 21:51), this captures the Year-Month-Day Hour:Minute.
 #--uniq -c: Groups identical minutes together and counts how many times they appear. Only works if your log file is already in chronological order.
 #--sort -n: Sorts the results numerically by the count. The "sharpest" density increase will be at the very bottom of the list.
-#grep -E $DateRange $JIRA_LOG | grep -E "[[:space:]]ERROR[[:space:]]" | cut -c 1-16 | uniq -c | sort -nr >> $REPORTS/BasaniteRCAMostErrorsPerMinute.log
+#grep -E $DateRange $APP_MAIN_LOG | grep -E "[[:space:]]ERROR[[:space:]]" | cut -c 1-16 | uniq -c | sort -nr >> "${}SeismoRCAMostErrorsPerMinute.log"
 #--If you want to see the timeline in order but highlight where the jumps happen:
-grep -E $DateRange $JIRA_LOG | grep -E "[[:space:]]ERROR[[:space:]]|Exception" | cut -c 1-16 | uniq -c >> $REPORTS/BasaniteRCASpikesList.log
+grep -E $DateRange $APP_MAIN_LOG | grep -E "[[:space:]]ERROR[[:space:]]|Exception" | cut -c 1-16 | uniq -c >> "${REPORTS}SeismoRCASpikesList.log"
 #--Visualizing with a "Text Bar Chart"
-grep -E $DateRange $JIRA_LOG | grep -E "[[:space:]]ERROR[[:space:]]|Exception" | cut -d' ' -f2 | cut -d':' -f1,2 | sort | uniq -c | awk '{printf "%s %s ", $2, $1; for(i=0; i<$1/10; i++) printf "#"; print ""}' >> $REPORTS/BasaniteRCASpikesChart.log
+grep -E $DateRange $APP_MAIN_LOG | grep -E "[[:space:]]ERROR[[:space:]]|Exception" | cut -d' ' -f2 | cut -d':' -f1,2 | sort | uniq -c | awk '{printf "%s %s ", $2, $1; for(i=0; i<$1/10; i++) printf "#"; print ""}' >> "${REPORTS}SeismoRCASpikesChart.log"
 
 
 
 ##--echo "Last 50 ERROR timeline:"
-tail -50 $JIRA_LOG > $REPORTS/BasaniteRCAJiraLogTail.txt
-echo "Failure Root Cause Analysys completed. Reports saved to: $REPORTS"
+tail -50 $APP_MAIN_LOG > "${REPORTS}SeismoRCAJiraLogTail.txt"
+echo "Failure Root Cause Analysys completed. Reports saved to: ${REPORTS}"
+
