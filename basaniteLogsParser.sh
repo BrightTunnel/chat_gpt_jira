@@ -87,7 +87,7 @@ JIRA_HOME_JFR="${APP_HOME}jfr/"
 ##--Logs:
 #APP_MAIN_LOG=${1:-/home/user/atlassian-jira-home/log/atlassian-jira.log}
 #CATALINA_LOG=${2:-/home/user/atlassian-jira-software/logs/catalina.out}
-CATALINA_LOG="${APP_INSTALL}catalina.out"
+CATALINA_LOG="${APP_INSTALL}catalina." #PAT e.g.: catalina.2026-03-14.log
 APP_MAIN_LOG="${APP_HOME}atlassian-confluence.log" #PAT
 APP_MAIN_LOG="${APP_HOME}atlassian-jira-perf.log"
 APP_MAIN_LOG="${APP_HOME}atlassian-jira.log"
@@ -103,27 +103,45 @@ mkdir -p "${REPORTS}"
 
 
 ##--PAT:
+#APP_INSTALL="/opt/atlassian/confluence/install/logs/" #PAT
 #APP_HOME="/opt/atlassian/confluence/home/logs/" #PAT
+#CATALINA_LOG="${APP_INSTALL}catalina." #PAT e.g.: catalina.2026-03-14.log
 #APP_MAIN_LOG="${APP_HOME}atlassian-confluence.log" #PAT
 #SeismoRCAReportLog="seismoRCAReport.log" #PAT
 
 ##--Conat log files:
-JiraHomeLogs=("${APP_MAIN_LOG}")
-JiraHomeLogsString="${JiraHomeLogs[0]}"
+LogNamesArr=("${APP_MAIN_LOG}")
+LogNames="${LogNamesArr[0]}"
 for ((i=1; i<11; i++)); do
     if [[ -f "${APP_MAIN_LOG}.${i}" ]]; then
-	    JiraHomeLogs+=("${APP_MAIN_LOG}.${i}")
-	    JiraHomeLogsString+=" ${JiraHomeLogs[i]}" #--Add space between file names
+	    LogNamesArr+=("${APP_MAIN_LOG}.${i}")
+	    LogNames+=" ${LogNamesArr[i]}" #--Add space between file names
     else
         echo "Warning: file ${APP_MAIN_LOG}.${i} not found" >&2
     fi
 done
-#echo "${JiraHomeLogsString}"
+#echo "${LogNames}"
+
+#LogNames="${CATALINA_LOG}"
+StartDate="2026-04-01"
+EndDate="2026-05-01"
+RollingDay=${StartDate}
+EndComparison=$(date -d "${EndDate} + 1 day" +%Y-%m-%d)
+while [ "${RollingDay}" != "$EndComparison" ]; do
+    LogFile="${CATALINA_LOG}${RollingDay}.log"
+    if [ -f "$LogFile" ]; then
+        echo "Found: $LogFile"
+        LogNames+=" $LogFile"
+    else
+        echo "Missing: $LogFile" >&2
+    fi
+    RollingDay=$(date -d "${RollingDay} + 1 day" +%Y-%m-%d)
+done
+
+
+
 FilterOR="[[:space:]]+(ERROR|FATAL|SEVERE|CRITICAL)[[:space:]]+"
-awk '$1 " " $2 >= "2020-02-00 00:00" && $1 " " $2 <= "2026-05-31 00:00"' ${JiraHomeLogsString} | grep -E "${FilterOR}" | sort | cut -c 1-16 | uniq -c | awk '{printf "%s %s   %s ", $2, $3, $1; for(i=0; i<$1/10; i++) printf "*"; print ""}' >> ${SeismoRCAReportLog}
-
-
-
+awk '$1 " " $2 >= "2020-02-00 00:00" && $1 " " $2 <= "2026-05-31 00:00"' ${LogNames} | grep -E "${FilterOR}" | sort | cut -c 1-16 | uniq -c | awk '{printf "%s %s   %s ", $2, $3, $1; for(i=0; i<$1/10; i++) printf "*"; print ""}' >> ${SeismoRCAReportLog}
 
 
 
