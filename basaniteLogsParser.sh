@@ -33,20 +33,9 @@ mkdir -p "${REPORTS}"
 SeismoRCAReportLog="${REPORTS}seismoRCAReport.log"
 SeismoLogExcerpt="${REPORTS}seismoLogExcerpt.log"
 
-##--PAT:
-#APP_INSTALL="/opt/atlassian/confluence/install/logs/"
-#APP_HOME="/opt/atlassian/confluence/home/logs/"
-#CATALINA_LOG="${APP_INSTALL}catalina." #e.g.: catalina.2026-03-14.log
-#APP_MAIN_LOG="${APP_HOME}atlassian-confluence.log"
-#SeismoRCAReportLog="seismoRCAReport.log"
-#SeismoLogExcerpt="seismoLogExcerpt.log"
-
-StartDate="2026-02-15"; StartTime="15:40"
-EndDate="2026-04-30"; EndTime="23:59"
-
 #declare -A keywordsMapPiped #keywordsMapPiped[""]=""
 declare -A keywordsMap
-#keywordsMap=(["Atlassian-errors"]="[[:space:]]+(ERROR|FATAL|SEVERE|CRITICAL)[[:space:]]+" ["Exceptions"]="[A-Za-z0-9\.]+Exception")
+keywordsMap=(["Atlassian-errors"]="[[:space:]]+(ERROR|FATAL|SEVERE|CRITICAL)[[:space:]]+" ["Exceptions"]="[A-Za-z0-9\.]+Exception")
 keywordsMap["${appLogName}, Atlassian-errors"]="[[:space:]]+(ERROR|FATAL|SEVERE|CRITICAL)[[:space:]]+"
 keywordsMap["${appLogName}, Exceptions"]="[A-Za-z0-9\.]+Exception"
 keywordsMap["${appLogName}, SlowRESTRequests"]="Request.*took|Slow[[:space:]]request" # Detect request timeout / slow endpoints
@@ -60,30 +49,44 @@ keywordsMap["ThreadPoolExecutor"]="max[[:space:]]threads|busy[[:space:]]threads|
 keywordsMap["StuckRequestThreads"]="StuckThread"
 keywordsMap["NodeShutdownTrigger"]="Shutdown|Stopping[[:space:]]Jira|Jira[[:space:]]is[[:space:]]shutting[[:space:]]down"
 
+
+
+##--PAT:
+#APP_INSTALL="/opt/atlassian/confluence/install/logs/"
+#APP_HOME="/opt/atlassian/confluence/home/logs/"
+#CATALINA_LOG="${APP_INSTALL}catalina." #e.g.: catalina.2026-03-14.log
+#APP_MAIN_LOG="${APP_HOME}atlassian-confluence.log"
+#SeismoRCAReportLog="seismoRCAReport.log"
+#SeismoLogExcerpt="seismoLogExcerpt.log"
+
+
 FilterOR="";
 FilterOR+="StuckThreadDetected"
 FilterOR+="|memory[[:space:]]leak"
 FilterOR+="|may[[:space:]]be[[:space:]]stuck"
 FilterOR+="|has[[:space:]]failed"
-FilterOR+="|[[:space:]](WARNING|WARN)[[:space:]]"
 FilterOR+="|[[:space:]](ERROR|FATAL|SEVERE|CRITICAL)[[:space:]]"
+#FilterOR+="|[[:space:]](WARNING|WARN)[[:space:]]"
 #FilterOR+="|${keywordsMap[${appLogName}]}" #not functionin
-FilterOR+="|${keywordsMap["JvmOutOfMemory"]}"
-FilterOR+="|${keywordsMap["DatabaseFailures"]}"
-FilterOR+="|${keywordsMap["ThreadPoolStarvation"]}"
-FilterOR+="|${keywordsMap["ThreadPoolExecutor"]}"
-FilterOR+="|${keywordsMap["StuckRequestThreads"]}"
+#FilterOR+="|${keywordsMap["JvmOutOfMemory"]}"
+#FilterOR+="|${keywordsMap["DatabaseFailures"]}"
+#FilterOR+="|${keywordsMap["ThreadPoolStarvation"]}"
+#FilterOR+="|${keywordsMap["ThreadPoolExecutor"]}"
+#FilterOR+="|${keywordsMap["StuckRequestThreads"]}"
 
-convert_string_date_to_iso(){
+StartDate="2026-02-20"; StartTime="14:50"
+EndDate="2026-04-30"; EndTime="23:59"
+
+convert_string_date_to_iso() {
 	date -d "$1" +%Y-%m-%d
 }
-print_seismograph(){
+print_seismograph() {
     local scale=${1:-10} # Use the first argument as the scale, default to 10 if empty
     shift #--Shift arguments so "$@" only contains the filenames
-    awk -v s="$scale" '{ printf "%s %s   %s ", $2, $3, $1; for(i=0; i<$1/s; i++) printf "*"; print "" }'
+    awk -v s="$scale" '{ printf "%s %s   %s ", $2, $3, $1; for(i=0; i<$1/s; i++) printf "*"; print "" }' "$@"
     #awk '{printf "%s %s   %s ", $2, $3, $1; for(i=0; i<$1/10; i++) printf "*"; print ""}' "$@"
 }
-date_range(){
+date_range() {
 	awk -v start="$StartDate $StartTime" -v end="$EndDate $EndTime" '$1 " " $2 >= start && $1 " " $2 <= end'  "$@"
 }
 
@@ -109,7 +112,7 @@ if [ -n "$LogNames" ]; then
 	LeadingDateRegex="^[0-9]{2}-[A-Z][a-z]{2}-[0-9]{4}"
 	#grep -Eh ${LeadingDateRegex} ${LogNames} | awk '$1 " " $2 >= "01-Jan-2026 00:00" && $1 " " $2 <= "30-Apr-2026 00:00"' | grep -E ${FilterOR} | sort | cut -c 1-17 | uniq -c | awk '{printf "%s %s   %s ", $2, $3, $1; for(i=0; i<$1; i++) printf "*"; print ""}' >> ${SeismoRCAReportLog}
 	grep -Eh ${LeadingDateRegex} ${LogNames} | while read -r date_str time_str rest; do
-    		iso_date=$(convert_string_date_to_iso "$date_str")
+    		iso_date="$(convert_string_date_to_iso $date_str)"
     		echo "$iso_date $time_str $rest"
 	done | date_range | grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 1 >> ${SeismoRCAReportLog} >> ${SeismoRCAReportLog}
 else
@@ -129,13 +132,16 @@ for ((i=1; i<11; i++)); do #--Conat log files
         #echo "Warning: file ${APP_MAIN_LOG}.${i} not found" >&2
     fi
 done
-echo >> ${SeismoRCAReportLog}
-echo -e "~HOME logs in range from ${StartDate} ${StartTime} to ${EndDate} ${EndTime}:\n${LogNames// /\\n}" >> ${SeismoRCAReportLog}
-echo "~Events: ${FilterOR}" >> ${SeismoRCAReportLog}
-echo "~SeismoGraph:" >> ${SeismoRCAReportLog}
-LeadingIsoDateRegex="^[0-9]{4}-[0-9]{2}-[0-9]{2}"
-grep -Eh ${LeadingIsoDateRegex} ${LogNames} | date_range | grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 20 >> ${SeismoRCAReportLog}
-
+if [ "${#LogNamesArr[@]}" -gt 1 ]; then
+	echo >> ${SeismoRCAReportLog}
+	echo -e "~HOME logs in range from ${StartDate} ${StartTime} to ${EndDate} ${EndTime}:\n${LogNames// /\\n}" >> ${SeismoRCAReportLog}
+	echo "~Events: ${FilterOR}" >> ${SeismoRCAReportLog}
+	echo "~SeismoGraph:" >> ${SeismoRCAReportLog}
+	LeadingIsoDateRegex="^[0-9]{4}-[0-9]{2}-[0-9]{2}"
+	grep -Eh ${LeadingIsoDateRegex} ${LogNames} | date_range | grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 20 >> ${SeismoRCAReportLog}
+else
+	echo "~SeismoGraph~ No logs found." >> ${SeismoRCAReportLog}
+fi
 
 #-HOME_LOG_NARROW_EXCERPT
 StartDate="2026-02-15"; StartTime="21:47"
