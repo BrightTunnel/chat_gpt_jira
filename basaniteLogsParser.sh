@@ -1,3 +1,4 @@
+#!/bin/bash
 #--Jira Node Failure Root Cause Analyzer. Scans jira + catalina logs for fatal patterns
 #--Seismo by Valeri Tikhonov, TD, April 2026.
 
@@ -118,22 +119,23 @@ while [ "${RollingDay}" != "$EndComparison" ]; do
 done
 echo >> ${SeismoRCAReportLog}
 echo -e "~INSTALL logs in range from ${StartDate} ${StartTime} to ${EndDate} ${EndTime}:${LogsParsedInfo}" >> ${SeismoRCAReportLog}
+
 if [[ -n "$LogNames" ]]; then
-	echo "~Events: ${FilterOR}" >> ${SeismoRCAReportLog}
-	echo "~SeismoGraph:" >> ${SeismoRCAReportLog}
+	echo "~Events: ${FilterOR}" >> "${SeismoRCAReportLog}"
+	echo "~SeismoGraph:" >> "${SeismoRCAReportLog}"
 	LeadingDateRegex="^[0-9]{2}-[A-Z][a-z]{2}-[0-9]{4}" #e.g.: 01-Jan-2026
 	#grep -Eh ${LeadingDateRegex} ${LogNames} | awk '$1 " " $2 >= "01-Jan-2026 00:00" && $1 " " $2 <= "30-Apr-2026 00:00"' | grep -E ${FilterOR} | sort | cut -c 1-17 | uniq -c | awk '{printf "%s %s   %s ", $2, $3, $1; for(i=0; i<$1; i++) printf "*"; print ""}' >> ${SeismoRCAReportLog}
 	#test: grep -Eh ${LeadingDateRegex} ${LogNames} |grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 1 >> ${SeismoRCAReportLog} >> ${SeismoRCAReportLog}
 	#grep -Eh ${LeadingDateRegex} ${LogNames} >> ${SeismoRCAReportLog}
 	
-	grep -Eh ${LeadingDateRegex} ${LogNames} | while read -r date_str time_str rest; do
+	grep -Eh "${LeadingDateRegex}" ${LogNames} | while read -r date_str time_str rest; do
    		iso_date=$(convert_string_date_to_iso "${date_str}")
 		echo "${iso_date} ${time_str} ${rest}"
-		done | date_range | grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 1 >> ${SeismoRCAReportLog} >> ${SeismoRCAReportLog}
-	
+		done | date_range | grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 1 >> ${SeismoRCAReportLog} 
 else
 	echo "~SeismoGraph~ No INSTALL_LOG data found." >> ${SeismoRCAReportLog}
 fi
+
 
 ##--HOME_LOG
 LogNamesArr=("${APP_MAIN_LOG}")
