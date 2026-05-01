@@ -123,8 +123,13 @@ if [ -n "$LogNames" ]; then
 	LeadingDateRegex="^[0-9]{2}-[A-Z][a-z]{2}-[0-9]{4}"
 	#grep -Eh ${LeadingDateRegex} ${LogNames} | awk '$1 " " $2 >= "01-Jan-2026 00:00" && $1 " " $2 <= "30-Apr-2026 00:00"' | grep -E ${FilterOR} | sort | cut -c 1-17 | uniq -c | awk '{printf "%s %s   %s ", $2, $3, $1; for(i=0; i<$1; i++) printf "*"; print ""}' >> ${SeismoRCAReportLog}
 	grep -Eh ${LeadingDateRegex} ${LogNames} | while read -r date_str time_str rest; do
-    		iso_date=$(convert_string_date_to_iso $date_str) #--do not wrap expression in ""
-    		echo "$iso_date $time_str $rest"
+    		#iso_date=$(convert_string_date_to_iso "$date_str") || continue #--do not wrap first part in ""
+	   		if iso_date=$(convert_string_date_to_iso "$date_str"); then
+    			echo "$iso_date $time_str $rest"
+			else
+				continue
+			    echo "Skipping invalid entry..."    # You can put 'return 1', 'exit 1', or 'continue' here
+			fi
 	done | date_range | grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 1 >> ${SeismoRCAReportLog} >> ${SeismoRCAReportLog}
 else
 	echo "~SeismoGraph~ No data found." >> ${SeismoRCAReportLog}
