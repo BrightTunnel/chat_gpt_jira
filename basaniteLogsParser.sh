@@ -77,18 +77,31 @@ FilterOR+="|${keywordsMap["NodeShutdownTrigger"]}"
 StartDate="2026-02-10"; StartTime="00:00"
 EndDate="2026-02-18"; EndTime="23:59"
 
-convert_string_date_to_iso() {
-    if [[ -z "$1" ]]; then #--input is empty?
-        echo "1970-01-01" #echo "No date provided." >&2
-	else
-	    local formatted_date
-	    if formatted_date=$(date -d "$1" +%Y-%m-%d 2>/dev/null); then
-			echo "$formatted_date" #echo "$formatted_date" >&2
-	    else
-			echo "1970-01-01" #echo "Error: '$1' is an invalid date." >&2
-		fi
+convert_string_date_to_iso_OBS() {
+	local formatted_date="1970-01-01"
+    if [[ -z "$1" ]]; then
+        echo "$formatted_date"
+    else
+        local formatted_date
+        #if formatted_date=$(date -d "$1" +%Y-%m-%d 2>/dev/null); then #Debian
+        #if formatted_date=$(date -d "$1" --iso-8601 2>/dev/null); then #--RHEL8 GNU-specific --iso-8601 for perfect compliance.
+        if formatted_date=$(date -d "$1" +%F 2>/dev/null); then # RHEL 8 uses GNU date, which supports -d and --iso-8601 directly
+            echo "$formatted_date"
+        else
+            echo "$formatted_date"
+        fi
     fi
 }
+
+convert_string_date_to_iso() {
+    local input_date="${1:-1970-01-01}"  # Use $1, or 1970-01-01 if $1 is empty
+    local formatted_date
+    # Attempt to format; if it fails (invalid string), fallback to epoch
+    formatted_date=$(date -d "$input_date" +%F 2>/dev/null) || formatted_date="1970-01-01"
+    echo "$formatted_date"
+}
+
+
 print_seismograph() {
     local scale=${1:-10} # Use the first argument as the scale, default to 10 if empty
     shift #--Shift arguments so "$@" only contains the filenames
@@ -118,16 +131,18 @@ echo -e "~INSTALL logs in range from ${StartDate} ${StartTime} to ${EndDate} ${E
 if [ -n "$LogNames" ]; then
 	echo "~Events: ${FilterOR}" >> ${SeismoRCAReportLog}
 	echo "~SeismoGraph:" >> ${SeismoRCAReportLog}
-	LeadingDateRegex="^[0-9]{2}-[A-Z][a-z]{2}-[0-9]{4}"
+	LeadingDateRegex="^[0-9]{2}-[A-Z][a-z]{2}-[0-9]{4}" #e.g.: 01-Jan-2026
 	#grep -Eh ${LeadingDateRegex} ${LogNames} | awk '$1 " " $2 >= "01-Jan-2026 00:00" && $1 " " $2 <= "30-Apr-2026 00:00"' | grep -E ${FilterOR} | sort | cut -c 1-17 | uniq -c | awk '{printf "%s %s   %s ", $2, $3, $1; for(i=0; i<$1; i++) printf "*"; print ""}' >> ${SeismoRCAReportLog}
 	#test: grep -Eh ${LeadingDateRegex} ${LogNames} |grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 1 >> ${SeismoRCAReportLog} >> ${SeismoRCAReportLog}
+	#grep -Eh ${LeadingDateRegex} ${LogNames} >> ${SeismoRCAReportLog}
 	
 	grep -Eh ${LeadingDateRegex} ${LogNames} | while read -r date_str time_str rest; do
-    		iso_date=$(convert_string_date_to_iso "${date_str}")
+   		iso_date=$(convert_string_date_to_iso "${date_str}")
 		echo "${iso_date} ${time_str} ${rest}"
-	done | date_range | grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 1 >> ${SeismoRCAReportLog} >> ${SeismoRCAReportLog}
+		done | date_range | grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 1 >> ${SeismoRCAReportLog} >> ${SeismoRCAReportLog}
+	
 else
-	echo "~SeismoGraph~ No data found." >> ${SeismoRCAReportLog}
+	echo "~SeismoGraph~ No INSTALL_LOG data found." >> ${SeismoRCAReportLog}
 fi
 
 
@@ -149,7 +164,7 @@ if [ "${#LogNamesArr[@]}" -gt 1 ]; then
 	LeadingIsoDateRegex="^[0-9]{4}-[0-9]{2}-[0-9]{2}"
 	grep -Eh ${LeadingIsoDateRegex} ${LogNames} | date_range | grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 20 >> ${SeismoRCAReportLog}
 else
-	echo "~SeismoGraph~ No logs found." >> ${SeismoRCAReportLog}
+	echo "~SeismoGraph~ No HOME_LOG found." >> ${SeismoRCAReportLog}
 fi
 
 #-HOME_LOG_NARROW_EXCERPT
@@ -159,8 +174,7 @@ echo -e "~HOME logs NARROW_EXCERPT in range from ${StartDate} ${StartTime} to ${
 echo >> ${SeismoLogExcerpt}
 grep -Eh ${LeadingIsoDateRegex} ${LogNames} | date_range | sed 'G' >> ${SeismoLogExcerpt}
 
-echo "~SeismoGraph: The end of the task." >> ${SeismoLogExcerpt}
-
+echo "~SeismoGraph: The end of the task." >> ${SeismoRCAReportLog}
 
 exit 0
 #todo: HTTP/1.1" 200
