@@ -101,25 +101,48 @@
 	REPORTS="/media/user/Storage/lenovo-storage/@Mobile/@Wiki/Projects/@Java/@Jira/temp_collection_of_scripts_to_be_sorted/bash/tmp/seismo_FailureRCAnalysis_$(date +%Y%m%d-%H%M%S)/"
 	mkdir -p "${REPORTS}"
 	SeismoRCAReportLog="${REPORTS}seismoRCAReport.log"
-
+	SeismoLogExcerpt="${REPORTS}seismoLogExcerpt.log"
 
 	##--PAT:
-	#APP_INSTALL="/opt/atlassian/confluence/install/logs/" #PAT
-	#APP_HOME="/opt/atlassian/confluence/home/logs/" #PAT
-	#CATALINA_LOG="${APP_INSTALL}catalina." #PAT e.g.: catalina.2026-03-14.log
-	#APP_MAIN_LOG="${APP_HOME}atlassian-confluence.log" #PAT
-	#SeismoRCAReportLog="seismoRCAReport.log" #PAT
+	#APP_INSTALL="/opt/atlassian/confluence/install/logs/"
+	#APP_HOME="/opt/atlassian/confluence/home/logs/"
+	#CATALINA_LOG="${APP_INSTALL}catalina." #e.g.: catalina.2026-03-14.log
+	#APP_MAIN_LOG="${APP_HOME}atlassian-confluence.log"
+	#SeismoRCAReportLog="seismoRCAReport.log"
+	#SeismoLogExcerpt="seismoLogExcerpt.log"
 
-	StartDate="2026-02-15"
-	EndDate="2026-04-30"
-	StartTime="15:40"
-	EndTime="23:59"
+	StartDate="2026-02-15"; StartTime="15:40"
+	EndDate="2026-04-30"; EndTime="23:59"
+
+	#declare -A keywordsMapPiped #keywordsMapPiped[""]=""
+	declare -A keywordsMap
+	#keywordsMap=(["Atlassian-errors"]="[[:space:]]+(ERROR|FATAL|SEVERE|CRITICAL)[[:space:]]+" ["Exceptions"]="[A-Za-z0-9\.]+Exception")
+	keywordsMap["${appLogName}, Atlassian-errors"]="[[:space:]]+(ERROR|FATAL|SEVERE|CRITICAL)[[:space:]]+"
+	keywordsMap["${appLogName}, Exceptions"]="[A-Za-z0-9\.]+Exception"
+	keywordsMap["${appLogName}, SlowRESTRequests"]="Request.*took|Slow[[:space:]]request" # Detect request timeout / slow endpoints
+	keywordsMap["${jiraSlowJql}, Slow JQL"]="took[[:space:]][0-9]+[[:space:]]ms|Slow[[:space:]]request"
+	keywordsMap["Cluster-health"]="Cluster.*lost|node.*not[[:space:]]responding|heartbeat|split[[:space:]]brain"
+	keywordsMap["JvmOutOfMemory"]="OutOfMemoryError" #JVM memory (Heap space) failures 
+	keywordsMap["DatabaseFailures"]="connection.*fail|database.*down|PSQLException|SQLTransientConnectionException"
+	keywordsMap["PluginFailures"]="Plugin.*failed|Unable[[:space:]]to[[:space:]]start[[:space:]]plugin|OSGi|Spring[[:space:]]context[[:space:]]failed"
+	keywordsMap["ThreadPoolStarvation"]="Thread.*blocked|StuckThread|thread[[:space:]]starvation"
+	keywordsMap["ThreadPoolExecutor"]="max[[:space:]]threads|busy[[:space:]]threads|stuck[[:space:]]thread"
+	keywordsMap["StuckRequestThreads"]="StuckThread"
+	keywordsMap["NodeShutdownTrigger"]="Shutdown|Stopping[[:space:]]Jira|Jira[[:space:]]is[[:space:]]shutting[[:space:]]down"
 	
-	FilterOR="[[:space:]](ERROR|FATAL|SEVERE|CRITICAL)[[:space:]]"
-	FilterOR+="|StuckThreadDetected"
+	FilterOR="";
+	FilterOR+="StuckThreadDetected"
 	FilterOR+="|memory[[:space:]]leak"
 	FilterOR+="|may[[:space:]]be[[:space:]]stuck"
 	FilterOR+="|has[[:space:]]failed"
+	FilterOR+="|[[:space:]](WARNING|WARN)[[:space:]]"
+	FilterOR+="|[[:space:]](ERROR|FATAL|SEVERE|CRITICAL)[[:space:]]"
+	#FilterOR+="|${keywordsMap[${appLogName}]}" #not functionin
+	FilterOR+="|${keywordsMap["JvmOutOfMemory"]}"
+	FilterOR+="|${keywordsMap["DatabaseFailures"]}"
+	FilterOR+="|${keywordsMap["ThreadPoolStarvation"]}"
+	FilterOR+="|${keywordsMap["ThreadPoolExecutor"]}"
+	FilterOR+="|${keywordsMap["StuckRequestThreads"]}"
 
 	##--INSTALL_LOG
 	RollingDay=${StartDate}
@@ -138,14 +161,23 @@
 	echo >> ${SeismoRCAReportLog}
 	echo -e "~INSTALL logs in range from ${StartDate} ${StartTime} to ${EndDate} ${EndTime}:${LogsParsedInfo}" >> ${SeismoRCAReportLog}
 	if [ -n "$LogNames" ]; then
-		echo "~Filter: ${FilterOR}" >> ${SeismoRCAReportLog}
+		convert_string_date_to_iso() {
+			date -d "$1" +%Y-%m-%d
+		}
+		echo "~Events: ${FilterOR}" >> ${SeismoRCAReportLog}
 		echo "~SeismoGraph:" >> ${SeismoRCAReportLog}
 		LeadingDateRegex="^[0-9]{2}-[A-Z][a-z]{2}-[0-9]{4}"
-		grep -Eh ${LeadingDateRegex} ${LogNames} | awk '$1 " " $2 >= "01-Jan-2026 00:00" && $1 " " $2 <= "30-Apr-2026 00:00"' | grep -E ${FilterOR} | sort | cut -c 1-17 | uniq -c | awk '{printf "%s %s   %s ", $2, $3, $1; for(i=0; i<$1; i++) printf "*"; print ""}' >> ${SeismoRCAReportLog}
+		#grep -Eh ${LeadingDateRegex} ${LogNames} | awk '$1 " " $2 >= "01-Jan-2026 00:00" && $1 " " $2 <= "30-Apr-2026 00:00"' | grep -E ${FilterOR} | sort | cut -c 1-17 | uniq -c | awk '{printf "%s %s   %s ", $2, $3, $1; for(i=0; i<$1; i++) printf "*"; print ""}' >> ${SeismoRCAReportLog}
+		grep -Eh ${LeadingDateRegex} ${LogNames} | while read -r date_str time_str rest; do
+    		iso_date=$(convert_string_date_to_iso "$date_str")
+    		echo "$iso_date $time_str $rest"
+		done | awk -v start="$StartDate $StartTime" -v end="$EndDate $EndTime" '$1 " " $2 >= start && $1 " " $2 <= end' | grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | awk '{printf "%s %s   %s ", $2, $3, $1; for(i=0; i<$1/10; i++) printf "*"; print ""}' >> ${SeismoRCAReportLog} >> ${SeismoRCAReportLog}
 	else
 		echo "~SeismoGraph~ No data found." >> ${SeismoRCAReportLog}
 	fi
-	
+
+
+
 	##--HOME_LOG
 	LogNamesArr=("${APP_MAIN_LOG}")
 	LogNames="${LogNamesArr[0]}"
@@ -159,10 +191,18 @@
 	done
 	echo >> ${SeismoRCAReportLog}
 	echo -e "~HOME logs in range from ${StartDate} ${StartTime} to ${EndDate} ${EndTime}:\n${LogNames// /\\n}" >> ${SeismoRCAReportLog}
-	echo "~Filters: ${FilterOR}" >> ${SeismoRCAReportLog}
+	echo "~Events: ${FilterOR}" >> ${SeismoRCAReportLog}
 	echo "~SeismoGraph:" >> ${SeismoRCAReportLog}
-	LeadingDateRegex="^[0-9]{4}-[0-9]{2}-[0-9]{2}"
-	grep -Eh ${LeadingDateRegex} ${LogNames} | awk -v start="$StartDate $StartTime" -v end="$EndDate $EndTime" '$1 " " $2 >= start && $1 " " $2 <= end' | grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | awk '{printf "%s %s   %s ", $2, $3, $1; for(i=0; i<$1/10; i++) printf "*"; print ""}' >> ${SeismoRCAReportLog}
+	LeadingIsoDateRegex="^[0-9]{4}-[0-9]{2}-[0-9]{2}"
+	grep -Eh ${LeadingIsoDateRegex} ${LogNames} | awk -v start="$StartDate $StartTime" -v end="$EndDate $EndTime" '$1 " " $2 >= start && $1 " " $2 <= end' | grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | awk '{printf "%s %s   %s ", $2, $3, $1; for(i=0; i<$1/10; i++) printf "*"; print ""}' >> ${SeismoRCAReportLog}
+
+
+	#-HOME_LOG_NARROW_EXCERPT
+	StartDate="2026-02-15"; StartTime="21:47"
+	EndDate="2026-02-15"; EndTime="22:09"
+	echo -e "~HOME logs NARROW_EXCERPT in range from ${StartDate} ${StartTime} to ${EndDate} ${EndTime}:\n${LogNames// /\\n}" >> ${SeismoLogExcerpt}
+	echo >> ${SeismoLogExcerpt}
+	grep -Eh ${LeadingIsoDateRegex} ${LogNames} | awk -v start="$StartDate $StartTime" -v end="$EndDate $EndTime" '$1 " " $2 >= start && $1 " " $2 <= end' >> ${SeismoLogExcerpt}
 
 
 
@@ -170,23 +210,6 @@
 	exit 0
 	#todo: HTTP/1.1" 200
 	
-	
-	declare -A keywordsMap
-	#keywordsMap=(["Atlassian-errors"]="[[:space:]]+(ERROR|FATAL|SEVERE|CRITICAL)[[:space:]]+" ["Exceptions"]="[A-Za-z0-9\.]+Exception")
-	keywordsMap["${appLogName}, Atlassian-errors"]="[[:space:]]+(ERROR|FATAL|SEVERE|CRITICAL)[[:space:]]+"
-	keywordsMap["${appLogName}, Exceptions"]="[A-Za-z0-9\.]+Exception"
-	keywordsMap["${jiraSlowJql}, Slow JQL"]="took[[:space:]][0-9]+[[:space:]]ms|Slow[[:space:]]request"
-	keywordsMap["${appLogName}, SlowRESTRequests"]="Request.*took|Slow[[:space:]]request" # Detect request timeout / slow endpoints
-	keywordsMap["Cluster-health"]="Cluster.*lost|node.*not[[:space:]]responding|heartbeat|split[[:space:]]brain"
-	keywordsMap["JvmOutOfMemory"]="OutOfMemoryError" #JVM memory (Heap space) failures 
-	keywordsMap["DatabaseFailures"]="connection.*fail|database.*down|PSQLException|SQLTransientConnectionException"
-	keywordsMap["PluginFailures"]="Plugin.*failed|Unable[[:space:]]to[[:space:]]start[[:space:]]plugin|OSGi|Spring[[:space:]]context[[:space:]]failed"
-	keywordsMap["ThreadPoolStarvation"]="Thread.*blocked|StuckThread|thread[[:space:]]starvation"
-	keywordsMap["StuckRequestThreads"]="StuckThread"
-	keywordsMap["NodeShutdownTrigger"]="Shutdown|Stopping[[:space:]]Jira|Jira[[:space:]]is[[:space:]]shutting[[:space:]]down"
-	
-	declare -A keywordsMapPiped
-	#keywordsMapPiped[""]=""
 	
 	DateRange="^2026-04-23[[:space:]]15:3[45]"
 	for keyword in "${!keywordsMap[@]}"; do
