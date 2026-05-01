@@ -1,4 +1,3 @@
-#!/bin/bash
 #--Jira Node Failure Root Cause Analyzer. Scans jira + catalina logs for fatal patterns
 #--Seismo by Valeri Tikhonov, TD, April 2026.
 
@@ -77,7 +76,7 @@ FilterOR+="|${keywordsMap["NodeShutdownTrigger"]}"
 StartDate="2026-02-10"; StartTime="00:00"
 EndDate="2026-02-18"; EndTime="23:59"
 
-convert_string_date_to_iso_OBS() {
+convert_string_date_to_iso() {
 	local formatted_date="1970-01-01"
     if [[ -z "$1" ]]; then
         echo "$formatted_date"
@@ -92,15 +91,6 @@ convert_string_date_to_iso_OBS() {
         fi
     fi
 }
-
-convert_string_date_to_iso() {
-    local input_date="${1:-1970-01-01}"  # Use $1, or 1970-01-01 if $1 is empty
-    local formatted_date
-    # Attempt to format; if it fails (invalid string), fallback to epoch
-    formatted_date=$(date -d "$input_date" +%F 2>/dev/null) || formatted_date="1970-01-01"
-    echo "$formatted_date"
-}
-
 
 print_seismograph() {
     local scale=${1:-10} # Use the first argument as the scale, default to 10 if empty
@@ -119,7 +109,7 @@ LogsParsedInfo="" #--for report header only, no business logic attached
 EndComparison=$(date -d "${EndDate} + 1 day" +%Y-%m-%d)
 while [ "${RollingDay}" != "$EndComparison" ]; do
     LogFile="${CATALINA_LOG}${RollingDay}.log"
-    if [ -f "$LogFile" ]; then #echo "Found: $LogFile"
+    if [[ -f "$LogFile" ]]; then #echo "Found: $LogFile"
         LogNames+=" $LogFile"
         LogsParsedInfo+="\n${LogFile}"
     #else echo "Missing: $LogFile" >&2
@@ -128,7 +118,7 @@ while [ "${RollingDay}" != "$EndComparison" ]; do
 done
 echo >> ${SeismoRCAReportLog}
 echo -e "~INSTALL logs in range from ${StartDate} ${StartTime} to ${EndDate} ${EndTime}:${LogsParsedInfo}" >> ${SeismoRCAReportLog}
-if [ -n "$LogNames" ]; then
+if [[ -n "$LogNames" ]]; then
 	echo "~Events: ${FilterOR}" >> ${SeismoRCAReportLog}
 	echo "~SeismoGraph:" >> ${SeismoRCAReportLog}
 	LeadingDateRegex="^[0-9]{2}-[A-Z][a-z]{2}-[0-9]{4}" #e.g.: 01-Jan-2026
@@ -145,7 +135,6 @@ else
 	echo "~SeismoGraph~ No INSTALL_LOG data found." >> ${SeismoRCAReportLog}
 fi
 
-
 ##--HOME_LOG
 LogNamesArr=("${APP_MAIN_LOG}")
 LogNames="${LogNamesArr[0]}"
@@ -156,7 +145,7 @@ for ((i=1; i<11; i++)); do #--Conat log files
     #else #echo "Warning: file ${APP_MAIN_LOG}.${i} not found" >&2
     fi
 done
-if [ "${#LogNamesArr[@]}" -gt 1 ]; then
+if [[ "${#LogNamesArr[@]}" -gt 1 ]]; then
 	echo >> ${SeismoRCAReportLog}
 	echo -e "~HOME logs in range from ${StartDate} ${StartTime} to ${EndDate} ${EndTime}:\n${LogNames// /\\n}" >> ${SeismoRCAReportLog}
 	echo "~Events: ${FilterOR}" >> ${SeismoRCAReportLog}
