@@ -79,18 +79,16 @@ EndDate="2026-02-18"; EndTime="23:59"
 
 convert_string_date_to_iso() {
     if [[ -z "$1" ]]; then #--input is empty?
-        echo "Error: No date provided." >&2
-        return 1
-    fi
-    local formatted_date
-    if formatted_date=$(date -d "$1" +%Y-%m-%d 2>/dev/null); then
-        echo "$formatted_date"
-    else
-        echo "Error: '$1' is an invalid date." >&2
-        return 1
+        echo "1970-01-01" #echo "No date provided." >&2
+	else
+	    local formatted_date
+	    if formatted_date=$(date -d "$1" +%Y-%m-%d 2>/dev/null); then
+			echo "$formatted_date" #echo "$formatted_date" >&2
+	    else
+			echo "1970-01-01" #echo "Error: '$1' is an invalid date." >&2
+		fi
     fi
 }
-
 print_seismograph() {
     local scale=${1:-10} # Use the first argument as the scale, default to 10 if empty
     shift #--Shift arguments so "$@" only contains the filenames
@@ -122,19 +120,15 @@ if [ -n "$LogNames" ]; then
 	echo "~SeismoGraph:" >> ${SeismoRCAReportLog}
 	LeadingDateRegex="^[0-9]{2}-[A-Z][a-z]{2}-[0-9]{4}"
 	#grep -Eh ${LeadingDateRegex} ${LogNames} | awk '$1 " " $2 >= "01-Jan-2026 00:00" && $1 " " $2 <= "30-Apr-2026 00:00"' | grep -E ${FilterOR} | sort | cut -c 1-17 | uniq -c | awk '{printf "%s %s   %s ", $2, $3, $1; for(i=0; i<$1; i++) printf "*"; print ""}' >> ${SeismoRCAReportLog}
+	#test: grep -Eh ${LeadingDateRegex} ${LogNames} |grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 1 >> ${SeismoRCAReportLog} >> ${SeismoRCAReportLog}
+	
 	grep -Eh ${LeadingDateRegex} ${LogNames} | while read -r date_str time_str rest; do
-    		#iso_date=$(convert_string_date_to_iso "$date_str") || continue #--do not wrap first part in ""
-	   		if iso_date=$(convert_string_date_to_iso "$date_str"); then
-    			echo "$iso_date $time_str $rest"
-			else
-				continue
-			    echo "Skipping invalid entry..."    # You can put 'return 1', 'exit 1', or 'continue' here
-			fi
+    		iso_date=$(convert_string_date_to_iso "${date_str}")
+		echo "${iso_date} ${time_str} ${rest}"
 	done | date_range | grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 1 >> ${SeismoRCAReportLog} >> ${SeismoRCAReportLog}
 else
 	echo "~SeismoGraph~ No data found." >> ${SeismoRCAReportLog}
 fi
-
 
 
 ##--HOME_LOG
@@ -144,8 +138,7 @@ for ((i=1; i<11; i++)); do #--Conat log files
     if [[ -f "${APP_MAIN_LOG}.${i}" ]]; then
 	    LogNamesArr+=("${APP_MAIN_LOG}.${i}")
 	    LogNames+=" ${LogNamesArr[i]}" #--Add space between file names
-    #else
-        #echo "Warning: file ${APP_MAIN_LOG}.${i} not found" >&2
+    #else #echo "Warning: file ${APP_MAIN_LOG}.${i} not found" >&2
     fi
 done
 if [ "${#LogNamesArr[@]}" -gt 1 ]; then
