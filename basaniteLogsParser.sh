@@ -58,7 +58,7 @@ keywordsMap["PluginFailures"]="Plugin.*failed|Unable[[:space:]]to[[:space:]]star
 keywordsMap["ThreadPoolStarvation"]="Thread.*blocked|StuckThread|thread[[:space:]]starvation"
 keywordsMap["ThreadPoolExecutor"]="max[[:space:]]threads|busy[[:space:]]threads|stuck[[:space:]]thread"
 keywordsMap["NodeShutdownTrigger"]="Shutdown|Stopping[[:space:]]Jira|Jira[[:space:]]is[[:space:]]shutting[[:space:]]down"
-FilterOR+="StuckThreadDetected"
+FilterOR="StuckThreadDetected"
 FilterOR+="|memory[[:space:]]leak"
 FilterOR+="|may[[:space:]]be[[:space:]]stuck"
 FilterOR+="|has[[:space:]]failed"
@@ -79,18 +79,17 @@ EndDate="2026-02-18"; EndTime="23:59"
 
 convert_string_date_to_iso() {
 	local formatted_date="1970-01-01"
-    if [[ -z "$1" ]]; then
-        echo "$formatted_date"
-    else
-        local formatted_date
-        #if formatted_date=$(date -d "$1" +%Y-%m-%d 2>/dev/null); then #Debian
-        #if formatted_date=$(date -d "$1" --iso-8601 2>/dev/null); then #--RHEL8 GNU-specific --iso-8601 for perfect compliance.
-        if formatted_date=$(date -d "$1" +%F 2>/dev/null); then # RHEL 8 uses GNU date, which supports -d and --iso-8601 directly
-            echo "$formatted_date"
-        else
-            echo "$formatted_date"
-        fi
-    fi
+	if [[ -z "$1" ]]; then
+		echo "$formatted_date"
+	else
+		#if formatted_date=$(date -d "$1" +%Y-%m-%d 2>/dev/null); then #Debian
+		#if formatted_date=$(date -d "$1" --iso-8601 2>/dev/null); then #--RHEL8 GNU-specific --iso-8601 for perfect compliance.
+		if formatted_date=$(date -d "$1" +%F 2>/dev/null); then # RHEL 8 uses GNU date, which supports -d and --iso-8601 directly
+			echo "$formatted_date"
+		else
+			echo "$formatted_date"
+		fi
+	fi
 }
 
 print_seismograph() {
@@ -124,11 +123,11 @@ if [[ -n "$LogNames" ]]; then
 	echo "~Events: ${FilterOR}" >> "${SeismoRCAReportLog}"
 	echo "~SeismoGraph:" >> "${SeismoRCAReportLog}"
 	LeadingDateRegex="^[0-9]{2}-[A-Z][a-z]{2}-[0-9]{4}" #e.g.: 01-Jan-2026
-	#grep -Eh ${LeadingDateRegex} ${LogNames} | awk '$1 " " $2 >= "01-Jan-2026 00:00" && $1 " " $2 <= "30-Apr-2026 00:00"' | grep -E ${FilterOR} | sort | cut -c 1-17 | uniq -c | awk '{printf "%s %s   %s ", $2, $3, $1; for(i=0; i<$1; i++) printf "*"; print ""}' >> ${SeismoRCAReportLog}
-	#test: grep -Eh ${LeadingDateRegex} ${LogNames} |grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 1 >> ${SeismoRCAReportLog} >> ${SeismoRCAReportLog}
-	#grep -Eh ${LeadingDateRegex} ${LogNames} >> ${SeismoRCAReportLog}
+	#grep -Eh ${LeadingDateRegex} "${LogNames}" | awk '$1 " " $2 >= "01-Jan-2026 00:00" && $1 " " $2 <= "30-Apr-2026 00:00"' | grep -E ${FilterOR} | sort | cut -c 1-17 | uniq -c | awk '{printf "%s %s   %s ", $2, $3, $1; for(i=0; i<$1; i++) printf "*"; print ""}' >> ${SeismoRCAReportLog}
+	#test: grep -Eh ${LeadingDateRegex} "${LogNames}" |grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 1 >> ${SeismoRCAReportLog} >> ${SeismoRCAReportLog}
+	#grep -Eh ${LeadingDateRegex} "${LogNames}" >> ${SeismoRCAReportLog}
 	
-	grep -Eh "${LeadingDateRegex}" ${LogNames} | while read -r date_str time_str rest; do
+	grep -Eh "${LeadingDateRegex}" "${LogNames}" | while read -r date_str time_str rest; do
    		iso_date=$(convert_string_date_to_iso "${date_str}")
 		echo "${iso_date} ${time_str} ${rest}"
 		done | date_range | grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 1 >> ${SeismoRCAReportLog} 
@@ -153,7 +152,7 @@ if [[ "${#LogNamesArr[@]}" -gt 1 ]]; then
 	echo "~Events: ${FilterOR}" >> ${SeismoRCAReportLog}
 	echo "~SeismoGraph:" >> ${SeismoRCAReportLog}
 	LeadingIsoDateRegex="^[0-9]{4}-[0-9]{2}-[0-9]{2}"
-	grep -Eh ${LeadingIsoDateRegex} ${LogNames} | date_range | grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 20 >> ${SeismoRCAReportLog}
+	grep -Eh ${LeadingIsoDateRegex} "${LogNames}" | date_range | grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 20 >> ${SeismoRCAReportLog}
 else
 	echo "~SeismoGraph~ No HOME_LOG found." >> ${SeismoRCAReportLog}
 fi
@@ -163,9 +162,10 @@ StartDate="2026-02-15"; StartTime="21:47"
 EndDate="2026-02-15"; EndTime="22:09"
 echo -e "~HOME logs NARROW_EXCERPT in range from ${StartDate} ${StartTime} to ${EndDate} ${EndTime}:\n${LogNames// /\\n}" >> ${SeismoLogExcerpt}
 echo >> ${SeismoLogExcerpt}
-grep -Eh ${LeadingIsoDateRegex} ${LogNames} | date_range | sed 'G' >> ${SeismoLogExcerpt}
+grep -Eh ${LeadingIsoDateRegex} "${LogNames}" | date_range | sed 'G' >> "${SeismoLogExcerpt}"
 
 echo "~SeismoGraph: The end of the task." >> ${SeismoRCAReportLog}
+
 
 exit 0
 #todo: HTTP/1.1" 200
