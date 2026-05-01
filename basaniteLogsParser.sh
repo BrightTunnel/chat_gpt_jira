@@ -78,12 +78,19 @@ StartDate="2026-02-10"; StartTime="00:00"
 EndDate="2026-02-18"; EndTime="23:59"
 
 convert_string_date_to_iso() {
-	if formatted_date=$(date -d "$1" +%Y-%m-%d 2>/dev/null); then
-		echo "$formatted_date"
-	else
-		echo "Error: '$1' is an invalid date." #--return 1 from inside a function
-	fi
+    if [[ -z "$1" ]]; then #--input is empty?
+        echo "Error: No date provided." >&2
+        return 1
+    fi
+    local formatted_date
+    if formatted_date=$(date -d "$1" +%Y-%m-%d 2>/dev/null); then
+        echo "$formatted_date"
+    else
+        echo "Error: '$1' is an invalid date." >&2
+        return 1
+    fi
 }
+
 print_seismograph() {
     local scale=${1:-10} # Use the first argument as the scale, default to 10 if empty
     shift #--Shift arguments so "$@" only contains the filenames
