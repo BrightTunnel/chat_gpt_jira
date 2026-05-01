@@ -33,21 +33,6 @@ mkdir -p "${REPORTS}"
 SeismoRCAReportLog="${REPORTS}seismoRCAReport.log"
 SeismoLogExcerpt="${REPORTS}seismoLogExcerpt.log"
 
-#declare -A keywordsMapPiped #keywordsMapPiped[""]=""
-declare -A keywordsMap
-keywordsMap=(["Atlassian-errors"]="[[:space:]]+(ERROR|FATAL|SEVERE|CRITICAL)[[:space:]]+" ["Exceptions"]="[A-Za-z0-9\.]+Exception")
-keywordsMap["${appLogName}, Atlassian-errors"]="[[:space:]]+(ERROR|FATAL|SEVERE|CRITICAL)[[:space:]]+"
-keywordsMap["${appLogName}, Exceptions"]="[A-Za-z0-9\.]+Exception"
-keywordsMap["${appLogName}, SlowRESTRequests"]="Request.*took|Slow[[:space:]]request" # Detect request timeout / slow endpoints
-keywordsMap["${jiraSlowJql}, Slow JQL"]="took[[:space:]][0-9]+[[:space:]]ms|Slow[[:space:]]request"
-keywordsMap["Cluster-health"]="Cluster.*lost|node.*not[[:space:]]responding|heartbeat|split[[:space:]]brain"
-keywordsMap["JvmOutOfMemory"]="OutOfMemoryError" #JVM memory (Heap space) failures 
-keywordsMap["DatabaseFailures"]="connection.*fail|database.*down|PSQLException|SQLTransientConnectionException"
-keywordsMap["PluginFailures"]="Plugin.*failed|Unable[[:space:]]to[[:space:]]start[[:space:]]plugin|OSGi|Spring[[:space:]]context[[:space:]]failed"
-keywordsMap["ThreadPoolStarvation"]="Thread.*blocked|StuckThread|thread[[:space:]]starvation"
-keywordsMap["ThreadPoolExecutor"]="max[[:space:]]threads|busy[[:space:]]threads|stuck[[:space:]]thread"
-keywordsMap["StuckRequestThreads"]="StuckThread"
-keywordsMap["NodeShutdownTrigger"]="Shutdown|Stopping[[:space:]]Jira|Jira[[:space:]]is[[:space:]]shutting[[:space:]]down"
 
 
 
@@ -59,26 +44,45 @@ keywordsMap["NodeShutdownTrigger"]="Shutdown|Stopping[[:space:]]Jira|Jira[[:spac
 #SeismoRCAReportLog="seismoRCAReport.log"
 #SeismoLogExcerpt="seismoLogExcerpt.log"
 
-
-FilterOR="";
+#declare -A keywordsMapPiped #keywordsMapPiped[""]=""
+declare -A keywordsMap
+keywordsMap=(["Atlassian-errors"]="[[:space:]]+(ERROR|FATAL|SEVERE|CRITICAL)[[:space:]]+" ["Exceptions"]="[A-Za-z0-9\.]+Exception")
+keywordsMap["${appLogName}, Atlassian-errors"]="[[:space:]](ERROR|FATAL|SEVERE|CRITICAL)[[:space:]]"
+keywordsMap["${appLogName}, Exceptions"]="[A-Za-z0-9\.]+Exception"
+keywordsMap["${appLogName}, SlowRESTRequests"]="Request.*took|Slow[[:space:]]request" # Detect request timeout / slow endpoints
+keywordsMap["${jiraSlowJql}, Slow JQL"]="took[[:space:]][0-9]+[[:space:]]ms|Slow[[:space:]]request"
+keywordsMap["Cluster-health"]="Cluster.*lost|node.*not[[:space:]]responding|heartbeat|split[[:space:]]brain"
+keywordsMap["JvmOutOfMemory"]="OutOfMemoryError" #JVM memory (Heap space) failures 
+keywordsMap["DatabaseFailures"]="connection.*fail|database.*down|PSQLException|SQLTransientConnectionException"
+keywordsMap["PluginFailures"]="Plugin.*failed|Unable[[:space:]]to[[:space:]]start[[:space:]]plugin|OSGi|Spring[[:space:]]context[[:space:]]failed"
+keywordsMap["ThreadPoolStarvation"]="Thread.*blocked|StuckThread|thread[[:space:]]starvation"
+keywordsMap["ThreadPoolExecutor"]="max[[:space:]]threads|busy[[:space:]]threads|stuck[[:space:]]thread"
+keywordsMap["NodeShutdownTrigger"]="Shutdown|Stopping[[:space:]]Jira|Jira[[:space:]]is[[:space:]]shutting[[:space:]]down"
 FilterOR+="StuckThreadDetected"
 FilterOR+="|memory[[:space:]]leak"
 FilterOR+="|may[[:space:]]be[[:space:]]stuck"
 FilterOR+="|has[[:space:]]failed"
-FilterOR+="|[[:space:]](ERROR|FATAL|SEVERE|CRITICAL)[[:space:]]"
+FilterOR+="|${keywordsMap["${appLogName}, Atlassian-errors"]}"
+FilterOR+="|${keywordsMap["${appLogName}, Exceptions"]}"
+FilterOR+="|${keywordsMap["${appLogName}, SlowRESTRequests"]}"
+FilterOR+="|${keywordsMap["Cluster-health"]}"
+FilterOR+="|${keywordsMap["JvmOutOfMemory"]}"
+FilterOR+="|${keywordsMap["DatabaseFailures"]}"
+FilterOR+="|${keywordsMap["PluginFailures"]}"
+FilterOR+="|${keywordsMap["ThreadPoolStarvation"]}"
+FilterOR+="|${keywordsMap["ThreadPoolExecutor"]}"
+FilterOR+="|${keywordsMap["NodeShutdownTrigger"]}"
 #FilterOR+="|[[:space:]](WARNING|WARN)[[:space:]]"
-#FilterOR+="|${keywordsMap[${appLogName}]}" #not functionin
-#FilterOR+="|${keywordsMap["JvmOutOfMemory"]}"
-#FilterOR+="|${keywordsMap["DatabaseFailures"]}"
-#FilterOR+="|${keywordsMap["ThreadPoolStarvation"]}"
-#FilterOR+="|${keywordsMap["ThreadPoolExecutor"]}"
-#FilterOR+="|${keywordsMap["StuckRequestThreads"]}"
 
-StartDate="2026-02-20"; StartTime="14:50"
-EndDate="2026-04-30"; EndTime="23:59"
+StartDate="2026-02-10"; StartTime="00:00"
+EndDate="2026-02-18"; EndTime="23:59"
 
 convert_string_date_to_iso() {
-	date -d "$1" +%Y-%m-%d
+	if formatted_date=$(date -d "$1" +%Y-%m-%d 2>/dev/null); then
+		echo "$formatted_date"
+	else
+		echo "Error: '$1' is an invalid date." #--return 1 from inside a function
+	fi
 }
 print_seismograph() {
     local scale=${1:-10} # Use the first argument as the scale, default to 10 if empty
@@ -102,7 +106,7 @@ while [ "${RollingDay}" != "$EndComparison" ]; do
         LogsParsedInfo+="\n${LogFile}"
     #else echo "Missing: $LogFile" >&2
     fi
-        RollingDay=$(date -d "${RollingDay} + 1 day" +%Y-%m-%d)
+	RollingDay=$(date -d "${RollingDay} + 1 day" +%Y-%m-%d)
 done
 echo >> ${SeismoRCAReportLog}
 echo -e "~INSTALL logs in range from ${StartDate} ${StartTime} to ${EndDate} ${EndTime}:${LogsParsedInfo}" >> ${SeismoRCAReportLog}
@@ -112,7 +116,7 @@ if [ -n "$LogNames" ]; then
 	LeadingDateRegex="^[0-9]{2}-[A-Z][a-z]{2}-[0-9]{4}"
 	#grep -Eh ${LeadingDateRegex} ${LogNames} | awk '$1 " " $2 >= "01-Jan-2026 00:00" && $1 " " $2 <= "30-Apr-2026 00:00"' | grep -E ${FilterOR} | sort | cut -c 1-17 | uniq -c | awk '{printf "%s %s   %s ", $2, $3, $1; for(i=0; i<$1; i++) printf "*"; print ""}' >> ${SeismoRCAReportLog}
 	grep -Eh ${LeadingDateRegex} ${LogNames} | while read -r date_str time_str rest; do
-    		iso_date="$(convert_string_date_to_iso $date_str)"
+    		iso_date=$(convert_string_date_to_iso $date_str) #--do not wrap expression in ""
     		echo "$iso_date $time_str $rest"
 	done | date_range | grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 1 >> ${SeismoRCAReportLog} >> ${SeismoRCAReportLog}
 else
@@ -150,7 +154,7 @@ echo -e "~HOME logs NARROW_EXCERPT in range from ${StartDate} ${StartTime} to ${
 echo >> ${SeismoLogExcerpt}
 grep -Eh ${LeadingIsoDateRegex} ${LogNames} | date_range | sed 'G' >> ${SeismoLogExcerpt}
 
-
+echo "~SeismoGraph: The end of the task." >> ${SeismoLogExcerpt}
 
 
 exit 0
