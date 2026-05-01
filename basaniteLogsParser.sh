@@ -76,14 +76,11 @@
 	APP_INSTALL="/opt/atlassian/jira/install/logs/" #e.g.:catalina.out
 	APP_INSTALL="/opt/atlassian/confluence/install/logs/" #PAT
 	APP_INSTALL="${1:-/media/user/Storage/@jira_logs_copy/jira_sys/logs/}"
-	
 	APP_HOME="/opt/atlassian/jira/home/logs/" #e.g.:atlassian-confluence.log*
 	APP_HOME="/opt/atlassian/confluence/home/logs/" #PAT
 	APP_HOME="${2:-/media/user/Storage/@jira_logs_copy/jira_home/log/}"
-	
 	JIRA_HOME_AUDIT="${APP_HOME}audit/"
 	JIRA_HOME_JFR="${APP_HOME}jfr/"
-	
 	##--Logs:
 	#APP_MAIN_LOG=${1:-/home/user/atlassian-jira-home/log/atlassian-jira.log}
 	#CATALINA_LOG=${2:-/home/user/atlassian-jira-software/logs/catalina.out}
@@ -98,64 +95,61 @@
 	catalinaLogName="${CATALINA_LOG##*/}"
 	appLogName="${APP_MAIN_LOG##*/}"
 	jiraSlowJql="${JIRA_SLOW_JQL##*/}"
-	
-	REPORTS="/media/user/Storage/lenovo-storage/@Mobile/@Wiki/Projects/@Java/@Jira/temp_collection_of_scripts_to_be_sorted/bash/tmp/seismo_FailureRCAnalysis_$(date +%Y%m%d-%H%M%S)/"
-	SeismoRCAReportLog="${REPORTS}seismoRCAReport.log"
-	
+
 	#sudo su - user
 	#rm ${SeismoRCAReportLog}
+	REPORTS="/media/user/Storage/lenovo-storage/@Mobile/@Wiki/Projects/@Java/@Jira/temp_collection_of_scripts_to_be_sorted/bash/tmp/seismo_FailureRCAnalysis_$(date +%Y%m%d-%H%M%S)/"
 	mkdir -p "${REPORTS}"
-	
-	
-	
+	SeismoRCAReportLog="${REPORTS}seismoRCAReport.log"
+
+
 	##--PAT:
 	#APP_INSTALL="/opt/atlassian/confluence/install/logs/" #PAT
 	#APP_HOME="/opt/atlassian/confluence/home/logs/" #PAT
 	#CATALINA_LOG="${APP_INSTALL}catalina." #PAT e.g.: catalina.2026-03-14.log
 	#APP_MAIN_LOG="${APP_HOME}atlassian-confluence.log" #PAT
 	#SeismoRCAReportLog="seismoRCAReport.log" #PAT
+
+	StartDate="2026-02-15"
+	EndDate="2026-04-30"
+	StartTime="15:40"
+	EndTime="23:59"
 	
-	#LogNames="${CATALINA_LOG}"
-	LogNames="" #--Reset the logs list
 	FilterOR="[[:space:]](ERROR|FATAL|SEVERE|CRITICAL)[[:space:]]"
 	FilterOR+="|StuckThreadDetected"
 	FilterOR+="|memory[[:space:]]leak"
 	FilterOR+="|may[[:space:]]be[[:space:]]stuck"
 	FilterOR+="|has[[:space:]]failed"
-	
-	StartDate="2026-01-10"
-	EndDate="2026-05-12"
-	LogsParsedInfo="" #--Just for report header, no business logic attached
+
+	##--INSTALL_LOG
 	RollingDay=${StartDate}
+	LogNames=""
+	LogsParsedInfo="" #--for report header only, no business logic attached
 	EndComparison=$(date -d "${EndDate} + 1 day" +%Y-%m-%d)
 	while [ "${RollingDay}" != "$EndComparison" ]; do
 	    LogFile="${CATALINA_LOG}${RollingDay}.log"
-	    if [ -f "$LogFile" ]; then
-	        #echo "Found: $LogFile"
+	    if [ -f "$LogFile" ]; then #echo "Found: $LogFile"
 	        LogNames+=" $LogFile"
-	        LogsParsedInfo+="\n\t${LogFile}"
-	    #else
-	        #echo "Missing: $LogFile" >&2
+	        LogsParsedInfo+="\n${LogFile}"
+	    #else echo "Missing: $LogFile" >&2
 	    fi
-        #sleep 0.5
         RollingDay=$(date -d "${RollingDay} + 1 day" +%Y-%m-%d)
 	done
-	echo "~~SeismoGraph. Filter: ${FilterOR}" >> ${SeismoRCAReportLog}
-	echo -e "Parsed logs:${LogsParsedInfo}" >> ${SeismoRCAReportLog}
-
-	LeadingDateRegex="^[0-9]{2}-[A-Z][a-z]{2}-[0-9]{4}"
-	#LogEntryStartDate="07-Jan-2026 00:00"
-	#LogEntryEndDate="10-Feb-2026 00:00"
-	grep -Eh ${LeadingDateRegex} ${LogNames} | awk '$1 " " $2 >= "01-Jan-2026 00:00" && $1 " " $2 <= "31-May-2026 00:00"' | grep -E ${FilterOR} | sort | cut -c 1-17 | uniq -c | awk '{printf "%s %s   %s ", $2, $3, $1; for(i=0; i<$1/10; i++) printf "*"; print ""}' >> ${SeismoRCAReportLog}
-
+	echo >> ${SeismoRCAReportLog}
+	echo -e "~INSTALL logs in range from ${StartDate} ${StartTime} to ${EndDate} ${EndTime}:${LogsParsedInfo}" >> ${SeismoRCAReportLog}
+	if [ -n "$LogNames" ]; then
+		echo "~Filter: ${FilterOR}" >> ${SeismoRCAReportLog}
+		echo "~SeismoGraph:" >> ${SeismoRCAReportLog}
+		LeadingDateRegex="^[0-9]{2}-[A-Z][a-z]{2}-[0-9]{4}"
+		grep -Eh ${LeadingDateRegex} ${LogNames} | awk '$1 " " $2 >= "01-Jan-2026 00:00" && $1 " " $2 <= "30-Apr-2026 00:00"' | grep -E ${FilterOR} | sort | cut -c 1-17 | uniq -c | awk '{printf "%s %s   %s ", $2, $3, $1; for(i=0; i<$1; i++) printf "*"; print ""}' >> ${SeismoRCAReportLog}
+	else
+		echo "~SeismoGraph~ No data found." >> ${SeismoRCAReportLog}
+	fi
 	
-	exit 0
-	
-	##--Conat log files:
+	##--HOME_LOG
 	LogNamesArr=("${APP_MAIN_LOG}")
-	echo "~~SeismoGraph: ${APP_MAIN_LOG##*/}, Filter:${FilterOR}" >> ${SeismoRCAReportLog}
 	LogNames="${LogNamesArr[0]}"
-	for ((i=1; i<11; i++)); do
+	for ((i=1; i<11; i++)); do #--Conat log files
 	    if [[ -f "${APP_MAIN_LOG}.${i}" ]]; then
 		    LogNamesArr+=("${APP_MAIN_LOG}.${i}")
 		    LogNames+=" ${LogNamesArr[i]}" #--Add space between file names
@@ -163,11 +157,17 @@
 	        #echo "Warning: file ${APP_MAIN_LOG}.${i} not found" >&2
 	    fi
 	done
-	wait
-	#echo "${LogNames}"
-	
-	
-	
+	echo >> ${SeismoRCAReportLog}
+	echo -e "~HOME logs in range from ${StartDate} ${StartTime} to ${EndDate} ${EndTime}:\n${LogNames// /\\n}" >> ${SeismoRCAReportLog}
+	echo "~Filters: ${FilterOR}" >> ${SeismoRCAReportLog}
+	echo "~SeismoGraph:" >> ${SeismoRCAReportLog}
+	LeadingDateRegex="^[0-9]{4}-[0-9]{2}-[0-9]{2}"
+	grep -Eh ${LeadingDateRegex} ${LogNames} | awk -v start="$StartDate $StartTime" -v end="$EndDate $EndTime" '$1 " " $2 >= start && $1 " " $2 <= end' | grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | awk '{printf "%s %s   %s ", $2, $3, $1; for(i=0; i<$1/10; i++) printf "*"; print ""}' >> ${SeismoRCAReportLog}
+
+
+
+
+	exit 0
 	#todo: HTTP/1.1" 200
 	
 	
