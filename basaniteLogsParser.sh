@@ -1,38 +1,34 @@
-#!/bin/bash
 #--Atlassian Application Failure Root Cause Analyzer. Scans local application node logs for fatal error patterns.
 #--SeismoLog by Valeri Tikhonov, TD, May 2026.
 
-REPORTS="/media/user/Storage/lenovo-storage/@Mobile/@Wiki/Projects/@Java/@Jira/temp_collection_of_scripts_to_be_sorted/bash/tmp/seismo_FailureRCAnalysis_$(date +%Y%m%d-%H%M%S)/"
-mkdir -p "${REPORTS}"
-SeismoRCAReportLog="${REPORTS}sseismo_failure-analysis.log"
-SeismoLogExcerpt="${REPORTS}seismo_log_excerpt.log"
-
-
 #bash << 'EOF'
+set enable-bracketed-paste on
+{
 #SeismoRCAReportLog="sseismo_failure-analysis.log"
 #SeismoLogExcerpt="seismo_log_excerpt.log"
 RangeTopDate="2026-02-10"; RangeTopTime="00:00"
-RangeEndDate="2026-02-18"; RangeEndTime="23:59"
+RangeEndDate="2026-05-07"; RangeEndTime="23:59"
 XcrptTopDate="2026-03-13"; XcrptTopTime="10:37"
-XcrptEndDate="2026-03-13"; XcrptEndTime="10:38"
-SensitivitySys=3
-SensitivityHome=10
-choice="Conf"
-choice="Dbg"
-if [[ "$choice" == "Jira" ]]; then
+XcrptEndDate="2026-05-07"; XcrptEndTime="10:38"
+SensitivitySys=5
+SensitivityHome=20
+choice="DBG"
+#choice="CONF"
+#choice="JIRA"
+if [[ "$choice" == "JIRA" ]]; then
     APP_INST="/opt/atlassian/jira/install/logs/"
-	APP_HOME="/opt/atlassian/jira/home/logs/"
+	APP_HOME="/opt/atlassian/jira/home/log/"
 	CATALINA_LOG="${APP_INST}catalina." #catalina.2026-03-14.log
 	APP_MAIN_LOG="${APP_HOME}atlassian-jira-perf.log"
 	APP_MAIN_LOG="${APP_HOME}atlassian-jira.log"
-elif [[ "$choice" == "Conf" ]]; then
+elif [[ "$choice" == "CONF" ]]; then
     APP_INST="/opt/atlassian/confluence/install/logs/"
     APP_HOME="/opt/atlassian/confluence/home/logs/"
     CATALINA_LOG="${APP_INST}catalina."
     APP_MAIN_LOG="${APP_HOME}atlassian-confluence.log"
 elif [[ "$choice" == "Bitbucket" ]]; then
     exit
-elif [[ "$choice" == "Dbg" ]]; then    
+elif [[ "$choice" == "DBG" ]]; then    
 	APP_INST="${1:-/media/user/Storage/@jira_logs_copy/jira_sys/logs/}"
 	APP_HOME="${2:-/media/user/Storage/@jira_logs_copy/jira_home/log/}"
 	CATALINA_LOG=${2:-/home/user/atlassian-jira-software/logs/catalina.out}
@@ -107,10 +103,6 @@ if [[ -n "$LogNames" ]]; then
 	echo "~Events: ${FilterOR}" >> "${SeismoRCAReportLog}"
 	echo "~SeismoGraph:" >> "${SeismoRCAReportLog}"
 	LeadingDateRegex="^[0-9]{2}-[A-Z][a-z]{2}-[0-9]{4}"
-	#grep -Eh ${LeadingDateRegex} ${LogNames} | awk '$1 " " $2 >= "01-Jan-2026 00:00" && $1 " " $2 <= "30-Apr-2026 00:00"' | grep -E ${FilterOR} | sort | cut -c 1-17 | uniq -c | awk '{printf "%s %s %s ", $2, $3, $1; for(i=0; i<$1; i++) printf "*"; print ""}' >> ${SeismoRCAReportLog}
-	#test: grep -Eh ${LeadingDateRegex} ${LogNames} |grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 1 >> ${SeismoRCAReportLog} >> ${SeismoRCAReportLog}
-	#grep -Eh ${LeadingDateRegex} ${LogNames} >> ${SeismoRCAReportLog}
-
 	grep -Eh "${LeadingDateRegex}" ${LogNames} | while read -r date_str time_str rest; do
 		iso_date=$(convert_string_date_to_iso "${date_str}")
 		echo "${iso_date} ${time_str} ${rest}"
@@ -137,7 +129,7 @@ if [[ "${#LogNamesArr[@]}" -gt 1 ]]; then
 	echo -e "~HOME logs in range from ${RangeTopDate} ${RangeTopTime} to ${RangeEndDate} ${RangeEndTime}:\n${LogNames// /\\n}" >> ${SeismoRCAReportLog}
 	echo "~Events: ${FilterOR}" >> ${SeismoRCAReportLog}
 	echo "~SeismoGraph:" >> ${SeismoRCAReportLog}
-	grep -Eh ${LeadingIsoDateRegex} ${LogNames} | date_range_full | grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 20 "$SensitivityHome" >> ${SeismoRCAReportLog}
+	grep -Eh ${LeadingIsoDateRegex} ${LogNames} | date_range_full | grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 10 "$SensitivityHome" >> ${SeismoRCAReportLog}
 else
 	echo "~SeismoGraph~ No HOME_LOG found." >> ${SeismoRCAReportLog}
 fi
@@ -151,49 +143,5 @@ grep -Eh ${LeadingIsoDateRegex} ${ExcerptOriginFileName} | date_range_excerpt | 
 echo "~SeismoGraph: Logs scan complete."
 echo "~SeismoGraph: eof" >> ${SeismoRCAReportLog}
 
+}
 #EOF
-#====================
-#====================
-exit 0
-
-
-
-
-
-DateRange="^2026-04-23[[:space:]]15:3[45]"
-for keyword in "${!keywordsMap[@]}"; do
-	echo -e "\n~~cat: $keyword: ${keywordsMap[$keyword]}" >> $SeismoRCAReportLog #--SubHeader/Filter
-	grep -E $DateRange $APP_MAIN_LOG | grep -hE ${keywordsMap[$keyword]} >> $SeismoRCAReportLog
-	echo -e "\n~~cat: $keyword: ${keywordsMap[$keyword]}" >> $SeismoRCAReportLog #--SubHeader/Filter
-	grep -E $DateRange $CATALINA_LOG | grep -hE ${keywordsMap[$keyword]} >> $SeismoRCAReportLog
-done
-
-##--Detect thread explosion, thread growth
-echo -e "\n~~cat: ThreadExplosion" >> $SeismoRCAReportLog
-grep -E $DateRange $CATALINA_LOG | grep -E "http-nio|http-bio|ThreadPoolExecutor" | grep -E "max[[:space:]]threads|busy[[:space:]]threads|stuck[[:space:]]thread" >> $SeismoRCAReportLog
-
-echo -e "\n~~cat: LoadBalancerHealthCheck" >> $SeismoRCAReportLog
-grep -E "healthcheck|status|heartbeat" $APP_MAIN_LOG | grep -E "fail|timeout|unreachable" >> $SeismoRCAReportLog
-
-##--Top exceptions summary
-grep -E $DateRange $APP_MAIN_LOG | grep -oE "[A-Za-z0-9\.]+Exception" | sort | uniq -c | sort -nr | head -10 >> "${}SeismoRCAtopExceptions.log"
-
-
-#--The "Quick Peak"
-#--1. extracts the date and time (down to the minute), 
-#--2. counts errors per minute, and sorts them so the highest density appears at the top:
-#--cut -c 1-16: Clips the first 16 characters of the line (2026-04-29 21:51), this captures the Year-Month-Day Hour:Minute.
-#--uniq -c: Groups identical minutes together and counts how many times they appear. Only works if your log file is already in chronological order.
-#--sort -n: Sorts the results numerically by the count. The "sharpest" density increase will be at the very bottom of the list.
-#grep -E $DateRange $APP_MAIN_LOG | grep -E "[[:space:]]ERROR[[:space:]]" | cut -c 1-16 | uniq -c | sort -nr >> "${}SeismoRCAMostErrorsPerMinute.log"
-#--If you want to see the timeline in order but highlight where the jumps happen:
-grep -E $DateRange $APP_MAIN_LOG | grep -E "[[:space:]]ERROR[[:space:]]|Exception" | cut -c 1-16 | uniq -c >> "${REPORTS}SeismoRCASpikesList.log"
-#--Visualizing with a "Text Bar Chart"
-grep -E $DateRange $APP_MAIN_LOG | grep -E "[[:space:]]ERROR[[:space:]]|Exception" | cut -d' ' -f2 | cut -d':' -f1,2 | sort | uniq -c | awk '{printf "%s %s ", $2, $1; for(i=0; i<$1/10; i++) printf "#"; print ""}' >> "${REPORTS}SeismoRCASpikesChart.log"
-
-
-
-##--echo "Last 50 ERROR timeline:"
-tail -50 $APP_MAIN_LOG > "${REPORTS}SeismoRCAJiraLogTail.txt"
-echo "Failure Root Cause Analysys completed. Reports saved to: ${REPORTS}"
-
