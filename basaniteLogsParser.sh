@@ -1,20 +1,19 @@
 #!/bin/bash
 #--Jira Node Failure Root Cause Analyzer. Scans jira + catalina logs for fatal patterns
-#--Seismo by Valeri Tikhonov, TD, April 2026.
+#--Seismo by Valeri Tikhonov, TD, April-May 2026.
 
 #sudo su - user
 #rm ${SeismoRCAReportLog}
 
-#bash << 'EOF'
 ##--Logs:
-#JIRA_AUD="${APP_HOME}audit/"
-#JIRA_JFR="${APP_HOME}jfr/"
 APP_INST="/opt/atlassian/jira/install/logs/"
 APP_INST="/opt/atlassian/confluence/install/logs/"
 APP_INST="${1:-/media/user/Storage/@jira_logs_copy/jira_sys/logs/}"
 APP_HOME="/opt/atlassian/jira/home/logs/"
 APP_HOME="/opt/atlassian/confluence/home/logs/" #PAT
 APP_HOME="${2:-/media/user/Storage/@jira_logs_copy/jira_home/log/}"
+JIRA_AUD="${APP_HOME}audit/"
+JIRA_JFR="${APP_HOME}jfr/"
 CATALINA_LOG=${2:-/home/user/atlassian-jira-software/logs/catalina.out}
 CATALINA_LOG="${APP_INST}catalina." #PAT e.g.: catalina.2026-03-14.log
 APP_MAIN_LOG=${1:-/home/user/atlassian-jira-home/log/atlassian-jira.log}
@@ -31,21 +30,22 @@ mkdir -p "${REPORTS}"
 SeismoRCAReportLog="${REPORTS}seismoRCAReport.log"
 SeismoLogExcerpt="${REPORTS}seismoLogExcerpt.log"
 
-#declare -A keywordsMapPiped #keywordsMapPiped[""]=""
+#--Notes:
+#--	Dont quote: ${LogNames} when used:
+#--	${LogsParsedInfo} for report header only, no business logic attached
+
+#--Events to watch:
 # Detect request timeout / slow endpoints
 # OutOfMemoryError, JVM memory (Heap space) failures
+
+#--Extra:
+#declare -A keywordsMapPiped #keywordsMapPiped[""]="" #--Linear Array style
 #keywordsMap["NodeShutdownTrigger"]="Shutdown|Stopping[[:space:]]Jira|Jira[[:space:]]is[[:space:]]shutting[[:space:]]down"
 #keywordsMap["Slow JQL"]="took[[:space:]][0-9]+[[:space:]]ms|Slow[[:space:]]request"
 #FilterOR+="|${keywordsMap["NodeShutdownTrigger"]}"
 #FilterOR+="|[[:space:]](WARNING|WARN)[[:space:]]"
 
-#--Notes:
-#--	Dont quote: ${LogNames} when used:
-#--	${LogsParsedInfo} for report header only, no business logic attached
 
-
-#====================
-#====================
 #bash << 'EOF'
 #APP_INST="/opt/atlassian/confluence/install/logs/"
 #APP_HOME="/opt/atlassian/confluence/home/logs/"
@@ -53,6 +53,13 @@ SeismoLogExcerpt="${REPORTS}seismoLogExcerpt.log"
 #APP_MAIN_LOG="${APP_HOME}atlassian-confluence.log"
 #SeismoRCAReportLog="seismoRCAReport.log"
 #SeismoLogExcerpt="seismoLogExcerpt.log"
+
+RangeStartDate="2026-02-10"; RangeStartTime="00:00"
+RangeEndDate="2026-02-18"; RangeEndTime="23:59"
+ExcerptStartDate="2026-03-13"; ExcerptStartTime="10:37"
+ExcerptEndDate="2026-03-13"; ExcerptEndTime="10:38"
+ExcerptOriginFileName=${APP_MAIN_LOG}
+
 declare -A keywordsMap
 keywordsMap["Atlassian-errors"]="[[:space:]](ERROR|FATAL|SEVERE|CRITICAL)[[:space:]]"
 keywordsMap["Exceptions"]="[A-Za-z0-9\.]+Exception"
@@ -76,15 +83,12 @@ FilterOR+="|${keywordsMap["DatabaseFailures"]}"
 FilterOR+="|${keywordsMap["PluginFailures"]}"
 FilterOR+="|${keywordsMap["ThreadPoolStarvation"]}"
 FilterOR+="|${keywordsMap["ThreadPoolExecutor"]}"
-StartDate="2026-02-10"; StartTime="00:00"
-EndDate="2026-02-18"; EndTime="23:59"
 
-
+LeadingIsoDateRegex="^[0-9]{4}-[0-9]{2}-[0-9]{2}"
 convert_string_date_to_iso() {
 	formatted_date=$(date -d "$1" +%F 2>/dev/null) || formatted_date="1970-01-01"
 	echo "$formatted_date"
 }
-
 print_seismograph() {
 	#--Use the first argument as the scale, default to 10 if empty
 	local scale=${1:-10} 
@@ -93,27 +97,30 @@ print_seismograph() {
 	awk -v s="$scale" '{ printf "%s %s   %s ", $2, $3, $1; for(i=0; i<$1/s; i++) printf "*"; print "" }' "$@"
 	#awk '{printf "%s %s   %s ", $2, $3, $1; for(i=0; i<$1/10; i++) printf "*"; print ""}' "$@"
 }
-date_range() {
-	awk -v start="$StartDate $StartTime" -v end="$EndDate $EndTime" '$1 " " $2 >= start && $1 " " $2 <= end'  "$@"
+date_range_full() {
+	awk -v start="$RangeStartDate $RangeStartTime" -v end="$RangeEndDate $RangeEndTime" '$1 " " $2 >= start && $1 " " $2 <= end'  "$@"
 }
-
-#--INSTALL_LOG
-RollingDay=${StartDate}
+date_range_excerpt() {
+	awk -v start="$ExcerptStartDate $ExcerptStartTime" -v end="$ExcerptEndDate $ExcerptEndTime" '$1 " " $2 >= start && $1 " " $2 <= end'  "$@"
+}
+#--SYS TOMCAT INSTALL_LOG
+RollingDay=${RangeStartDate}
 LogNames="" 
 LogsParsedInfo=""
-EndComparison=$(date -d "${EndDate} + 1 day" +%Y-%m-%d)
+EndComparison=$(date -d "${RangeEndDate} + 1 day" +%Y-%m-%d)
 while [ "${RollingDay}" != "$EndComparison" ]; do
 	LogFile="${CATALINA_LOG}${RollingDay}.log"
 	if [[ -f "$LogFile" ]]; then
 		#echo "Found: $LogFile"
 		LogNames+=" $LogFile"
 		LogsParsedInfo+="\n${LogFile}"
+		echo "~Add to scope ${LogFile}" #Debug/Verbose
 	#else echo "Missing: $LogFile" >&2
 	fi
 	RollingDay=$(date -d "${RollingDay} + 1 day" +%Y-%m-%d)
 done
-echo >> ${SeismoRCAReportLog}
-echo -e "~INSTALL logs in range from ${StartDate} ${StartTime} to ${EndDate} ${EndTime}:${LogsParsedInfo}" >> ${SeismoRCAReportLog}
+echo "~Parsing SYS logs..." #Debug/Verbose
+echo -e "~INSTALL logs in range from ${RangeStartDate} ${RangeStartTime} to ${RangeEndDate} ${RangeEndTime}:${LogsParsedInfo}" > ${SeismoRCAReportLog}
 if [[ -n "$LogNames" ]]; then
 	echo "~Events: ${FilterOR}" >> "${SeismoRCAReportLog}"
 	echo "~SeismoGraph:" >> "${SeismoRCAReportLog}"
@@ -125,7 +132,7 @@ if [[ -n "$LogNames" ]]; then
 	grep -Eh "${LeadingDateRegex}" ${LogNames} | while read -r date_str time_str rest; do
    		iso_date=$(convert_string_date_to_iso "${date_str}")
 		echo "${iso_date} ${time_str} ${rest}"
-		done | date_range | grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 1 >> ${SeismoRCAReportLog} 
+		done | date_range_full | grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 1 >> ${SeismoRCAReportLog} 
 else
 	echo "~SeismoGraph~ No INSTALL_LOG data found." >> ${SeismoRCAReportLog}
 fi
@@ -138,29 +145,29 @@ for ((i=1; i<11; i++)); do
 		LogNamesArr+=("${APP_MAIN_LOG}.${i}")
 		 #--Conat log files. Separate file names by space
 		LogNames+=" ${LogNamesArr[i]}"
+		echo "~Add to scope ${LogNamesArr[i]}" #Debug/Verbose
 	#else #echo "Warning: file ${APP_MAIN_LOG}.${i} not found" >&2
 	fi
 done
+echo "~Parsing HOME logs..." #Debug/Verbose
 if [[ "${#LogNamesArr[@]}" -gt 1 ]]; then
 	echo >> ${SeismoRCAReportLog}
-	echo -e "~HOME logs in range from ${StartDate} ${StartTime} to ${EndDate} ${EndTime}:\n${LogNames// /\\n}" >> ${SeismoRCAReportLog}
+	echo -e "~HOME logs in range from ${ExcerptStartDate} ${RangeStartTime} to ${RangeEndDate} ${RangeEndTime}:\n${LogNames// /\\n}" >> ${SeismoRCAReportLog}
 	echo "~Events: ${FilterOR}" >> ${SeismoRCAReportLog}
 	echo "~SeismoGraph:" >> ${SeismoRCAReportLog}
-	LeadingIsoDateRegex="^[0-9]{4}-[0-9]{2}-[0-9]{2}"
-	grep -Eh ${LeadingIsoDateRegex} ${LogNames} | date_range | grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 20 >> ${SeismoRCAReportLog}
+	grep -Eh ${LeadingIsoDateRegex} ${LogNames} | date_range_full | grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 20 >> ${SeismoRCAReportLog}
 else
 	echo "~SeismoGraph~ No HOME_LOG found." >> ${SeismoRCAReportLog}
 fi
 
 #-HOME_LOG_NARROW_EXCERPT
-StartDate="2026-02-15"; StartTime="21:47"
-EndDate="2026-02-15"; EndTime="22:09"
-echo -e "~HOME logs NARROW_EXCERPT in range from ${StartDate} ${StartTime} to ${EndDate} ${EndTime}:\n${LogNames// /\\n}" >> ${SeismoLogExcerpt}
-echo >> ${SeismoLogExcerpt}
-grep -Eh ${LeadingIsoDateRegex} ${LogNames} | date_range | sed 'G' >> "${SeismoLogExcerpt}"
+echo "~Extracting Excerpt from the: ${ExcerptOriginFileName}..." #Debug/Verbose
+echo -e "~HOME logs NARROW_EXCERPT in range from ${ExcerptStartDate} ${ExcerptStartTime} to ${ExcerptEndDate} ${ExcerptEndTime}:\n${ExcerptOriginFileName// /\\n}" > ${SeismoLogExcerpt}
+echo "" >> ${SeismoLogExcerpt}
+grep -Eh ${LeadingIsoDateRegex} ${ExcerptOriginFileName} | date_range_excerpt | sed 'G' >> "${SeismoLogExcerpt}"
 
-echo "~SeismoGraph: Log scan complete." >> ${SeismoRCAReportLog}
-
+echo "~SeismoGraph: Logs scan complete."
+echo "~SeismoGraph: eof" >> ${SeismoRCAReportLog}
 
 #EOF
 #====================
@@ -168,7 +175,6 @@ echo "~SeismoGraph: Log scan complete." >> ${SeismoRCAReportLog}
 
 exit 0
 #todo: HTTP/1.1" 200
-
 
 
 
@@ -208,3 +214,4 @@ grep -E $DateRange $APP_MAIN_LOG | grep -E "[[:space:]]ERROR[[:space:]]|Exceptio
 ##--echo "Last 50 ERROR timeline:"
 tail -50 $APP_MAIN_LOG > "${REPORTS}SeismoRCAJiraLogTail.txt"
 echo "Failure Root Cause Analysys completed. Reports saved to: ${REPORTS}"
+
