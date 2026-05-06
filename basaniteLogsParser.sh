@@ -2,17 +2,11 @@
 #--Atlassian Application Failure Root Cause Analyzer. Scans local application node logs for fatal error patterns.
 #--SeismoLog by Valeri Tikhonov, TD, May 2026.
 
-REPORTS="/media/user/Storage/lenovo-storage/@Mobile/@Wiki/Projects/@Java/@Jira/temp_collection_of_scripts_to_be_sorted/bash/tmp/seismo_FailureRCAnalysis_$(date +%Y%m%d-%H%M%S)/"
-mkdir -p "${REPORTS}"
-SeismoRCAReportLog="${REPORTS}sseismo_failure-analysis.log"
-SeismoLogExcerpt="${REPORTS}seismo_log_excerpt.log"
-
-
-#bash << 'EOF'
-set enable-bracketed-paste on
+bash << 'EOF'
+set enable-bracketed-paste off
 {
-#SeismoRCAReportLog="sseismo_failure-analysis.log"
-#SeismoLogExcerpt="seismo_log_excerpt.log"
+SeismoRCAReportLog="sseismo_failure-analysis.log"
+SeismoLogExcerpt="seismo_log_excerpt.log"
 RangeTopDate="2026-02-10"; RangeTopTime="00:00"
 RangeEndDate="2026-05-07"; RangeEndTime="23:59"
 XcrptTopDate="2026-03-13"; XcrptTopTime="10:37"
