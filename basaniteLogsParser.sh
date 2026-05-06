@@ -2,7 +2,7 @@
 #--Atlassian Application Failure Root Cause Analyzer. Scans local application node logs for fatal error patterns.
 #--SeismoLog by Valeri Tikhonov, TD, May 2026.
 
-bash << 'EOF'
+#bash << 'EOF'
 set enable-bracketed-paste off
 {
 SeismoRCAReportLog="sseismo_failure-analysis.log"
