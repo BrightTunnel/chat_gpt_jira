@@ -1,12 +1,3 @@
-#!/bin/bash
-#--Atlassian Application Failure Root Cause Analyzer. Scans local application node logs for fatal error patterns.
-#--SeismoLog by Valeri Tikhonov, TD, May 2026.
-
-
-
-#bash << 'EOF'
-set enable-bracketed-paste on
-{
 choice="DBG"
 #choice="CONF"
 #choice="JIRA"
@@ -88,7 +79,7 @@ print_seismograph() {
 	local scale=${1:-10}
 	local threshold=${2:-1}
 	shift; shift #shift arguments so "$@" contains only data
-	awk -v s="$scale" -v t="$threshold" '$1 > t { printf "%s %s  %s ", $2, $3, $1; for(i=0; i<$1/s; i++) printf "*"; print "" }' "$@"
+	awk -v s="$scale" -v t="$threshold" '$1 > t { printf "%s %s\t%s\t", $2, $3, $1; for(i=0; i<$1/s; i++) printf "*"; print "" }' "$@"
 }
 date_range_full() {
 	awk -v start="$RangeHeadDate $RangeHeadTime" -v end="$RangeTailDate $RangeTailTime" '$1 " " $2 >= start && $1 " " $2 <= end' "$@"
@@ -174,20 +165,3 @@ if [[ "${#LogNamesArr[@]}" -gt 0 ]]; then
 else
 	echo "~SeismoGraph~ No HOME_LOG found." >> ${SeismoRCAReportLog}
 fi
-
-
-exit 0
-#-HOME_LOG_NARROW_EXCERPT
-echo "~Extracting Excerpt from the: ${XcrptFromTheLog}..." #Debug/Verbose
-echo -e "~HOME logs NARROW_EXCERPT in range from ${XcrptHeadDateTime} to ${XcrptTailDateTime}:\n${XcrptFromTheLog// /\\n}" > ${SeismoLogExcerpt}
-echo "" >> ${SeismoLogExcerpt}
-grep -Eh ${LeadingIsoDateRegex} ${XcrptFromTheLog} | date_range_excerpt | sed 'G' >> "${SeismoLogExcerpt}"
-
-echo "~SeismoGraph: Logs scan complete."
-echo "~SeismoGraph: eof" >> ${SeismoRCAReportLog}
-
-}
-#EOF
-#====================
-#====================
-
