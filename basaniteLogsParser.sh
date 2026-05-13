@@ -1,16 +1,16 @@
-
 #bash << 'EOF'
 set enable-bracketed-paste on
 {
 choice="CONF"
 #choice="JIRA"
+is_web_log=1
 SeismoRCAReportLog="sseismo_failure-analysis.log"
 SeismoLogExcerpt="seismo_log_excerpt.log"
 if [[ "$choice" == "JIRA" ]]; then
 	APP_INST="/opt/atlassian/jira/install/logs/"
 	APP_HOME="/opt/atlassian/jira/home/log/"
 	CATALINA_LOG="${APP_INST}catalina." #catalina.2026-03-14.log
-	CATALINA_LOG="${APP_INST}conf_access_log." #conf_access_log.2026-03-14.log
+	CATALINA_LOG="${APP_INST}conf_access_log." #conf_access_log.2026-03-14.log (is_web_log=1)
 	APP_MAIN_LOG="${APP_HOME}atlassian-jira-perf.log"
 	APP_MAIN_LOG="${APP_HOME}atlassian-jira.log"
 	thresholdSys=5
@@ -19,7 +19,7 @@ elif [[ "$choice" == "CONF" ]]; then
 	APP_INST="/opt/atlassian/confluence/install/logs/"
 	APP_HOME="/opt/atlassian/confluence/home/logs/"
 	CATALINA_LOG="${APP_INST}catalina." #catalina.2026-03-14.log
-	CATALINA_LOG="${APP_INST}conf_access_log." #conf_access_log.2026-03-14.log
+	CATALINA_LOG="${APP_INST}conf_access_log." #conf_access_log.2026-03-14.log (is_web_log=1)
 	APP_MAIN_LOG="${APP_HOME}atlassian-confluence.log"
 	thresholdSys=2
 	thresholdHome=20
@@ -30,7 +30,7 @@ elif [[ "$choice" == "DBG" ]]; then
 	APP_HOME="/media/user/Storage/@jira_logs_copy/jira_home/log/"
 	CATALINA_LOG=${2:-/home/user/atlassian-jira-software/logs/catalina.out}
 	CATALINA_LOG="${APP_INST}catalina." #catalina.2026-03-14.log
-	CATALINA_LOG="${APP_INST}conf_access_log." #conf_access_log.2026-03-14.log
+	CATALINA_LOG="${APP_INST}conf_access_log." #conf_access_log.2026-03-14.log (is_web_log=1)
 	APP_MAIN_LOG=${1:-/home/user/atlassian-jira-home/log/atlassian-jira.log}
 	APP_MAIN_LOG="${APP_HOME}atlassian-jira.log"
 	thresholdSys=1
@@ -40,6 +40,8 @@ elif [[ "$choice" == "DBG" ]]; then
 	SeismoRCAReportLog="${REPORTS}sseismo_failure-analysis.log"
 	SeismoLogExcerpt="${REPORTS}seismo_log_excerpt.log"
 fi
+#catalinaLogName="${CATALINA_LOG##*/}"
+#appLogName="${APP_MAIN_LOG##*/}"
 
 RangeHeadDate="2026-02-11"; RangeHeadTime="11:11"
 RangeTailDate="2026-02-15"; RangeTailTime="23:10"
@@ -80,17 +82,17 @@ FilterOR+="|[[:space:]]HTTP/1.1[[:space:]]5" #[HTTP/1.1 504]
 FilterOR+="|Failed[[:space:]]to[[:space:]]delete" #WARN: Failed to delete a remote link
 
 LeadingIsoDateRegex="^[0-9]{4}-[0-9]{2}-[0-9]{2}"
-LeadingDateRegexDash="^[0-9]{2}-[A-Z][a-z]{2}-[0-9]{4}" #12-May-2026 09:24:06.999
-LeadingDateRegexSlash="^\[[0-9]{2}/[A-Z][a-z]{2}/[0-9]{4}" #[DD/Mon/YYYY:HH:mm:ss
+LeadingDateRegexDash="^[0-9]{2}-[A-Z][a-z]{2}-[0-9]{4}" #DD-Mmm-YYYY HH:mm:ss.sss  12-May-2026 09:24:06.999 --Database timestamps, Java/Oracle logs
+LeadingDateRegexSlash="^\[[0-9]{2}/[A-Z][a-z]{2}/[0-9]{4}" #[DD/Mon/YYYY:HH:mm:ss --Apache/Nginx web server logs 
 
-convert_string_date_to_iso() {
+convert_java_date_to_iso() {
 	#--From: 12-May-2026 09:24:06.999 to 2026-05-12
 	#--From: [12/May/2026:09:24:06 -0400] to 2026-05-12
 	formatted_date=$(date -d "$1" +%F 2>/dev/null) || formatted_date="1970-01-01"
 	echo "$formatted_date"
 }
 
-convert_accesslog_date_to_iso() {
+convert_apache_nginx_date_to_iso() {
     #-- From: [12/Feb/2026:08:59:58 -0400] to 2026-02-12
     local input_date="${1//[\[\]]/}" #Remove [ and ]
     input_date="${input_date/:/ }" #Swap first colon (after year) for space
@@ -132,31 +134,31 @@ while [ "${RollingDay}" != "$EndComparison" ]; do
 	fi
 	RollingDay=$(date -d "${RollingDay} + 1 day" +%Y-%m-%d)
 done
+
 echo "~Parsing SYS logs..." #Debug/Verbose
 if [[ -n "$LogNames" ]]; then
 	echo -e "~INSTALL logs in range from ${RangeHeadDate} ${RangeHeadTime} to ${RangeTailDate} ${RangeTailTime}:${LogsParsedInfo}" > ${SeismoRCAReportLog}
 	echo "~Events: ${FilterOR}" >> "${SeismoRCAReportLog}"
 	echo "~SeismoGraph:" >> "${SeismoRCAReportLog}"
-
-	#--From: 12-May-2026 09:24:06.999
-	#	grep -Eh "${LeadingDateRegexDash}" ${LogNames} | while read -r date_str time_str rest; do
-	#		iso_date=$(convert_string_date_to_iso "${date_str}") #--From: 12-May-2026 09:24:06.999 to 2026-05-12
-	#		echo "${iso_date} ${time_str} ${rest}"
-	#		done | date_range_full | grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 1 "$thresholdSys" >> ${SeismoRCAReportLog} 
-
-	#--From: [12/Feb/2026:08:59:58 -0400]
-	grep -Eh "${LeadingDateRegexSlash}" ${LogNames} | while read -r ts_part1 ts_part2 rest; do
-    # ts_part1: [12/Feb/2026:08:59:58
-    # ts_part2: -0400]
-    iso_date=$(convert_accesslog_date_to_iso "${ts_part1} ${ts_part2}")
-    log_time="${ts_part1#*:}" #Extract time 08:59:58
-    echo "${iso_date} ${log_time} ${rest}"
-	done | date_range_full | grep -E "${FilterOR}" | sort | cut -c 1-16 | uniq -c | print_seismograph 1 "$thresholdSys" >> ${SeismoRCAReportLog}
-
+	if (( is_web_log )); then
+		#--From: [12/Feb/2026:08:59:58 -0400]
+		grep -Eh "${LeadingDateRegexSlash}" ${LogNames} | while read -r ts_part1 ts_part2 rest; do
+		    # ts_part1: [12/Feb/2026:08:59:58
+		    # ts_part2: -0400]
+		    iso_date=$(convert_apache_nginx_date_to_iso "${ts_part1} ${ts_part2}")
+		    log_time="${ts_part1#*:}" #Extract time 08:59:58
+		    echo "${iso_date} ${log_time} ${rest}"
+			done | date_range_full | grep -E "${FilterOR}" | sort | cut -c 1-16 | uniq -c | print_seismograph 1 "$thresholdSys" >> ${SeismoRCAReportLog}
+	else
+		#--From: 12-May-2026 09:24:06.999
+		grep -Eh "${LeadingDateRegexDash}" ${LogNames} | while read -r date_str time_str rest; do
+			iso_date=$(convert_java_date_to_iso "${date_str}") #--From: 12-May-2026 09:24:06.999 to 2026-05-12
+			echo "${iso_date} ${time_str} ${rest}"
+			done | date_range_full | grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 1 "$thresholdSys" >> ${SeismoRCAReportLog} 
+	fi
 else
 	echo "~SeismoGraph~ No INSTALL_LOG data found." >> ${SeismoRCAReportLog}
 fi
-
 
 
 #--HOME_LOG
@@ -209,4 +211,19 @@ if [[ "${#LogNamesArr[@]}" -gt 0 ]]; then
 else
 	echo "~SeismoGraph~ No HOME_LOG found." >> ${SeismoRCAReportLog}
 fi
+
+exit 0
+#-HOME_LOG_NARROW_EXCERPT
+echo "~Extracting Excerpt from the: ${XcrptFromTheLog}..." #Debug/Verbose
+echo -e "~HOME logs NARROW_EXCERPT in range from ${XcrptHeadDateTime} to ${XcrptTailDateTime}:\n${XcrptFromTheLog// /\\n}" > ${SeismoLogExcerpt}
+echo "" >> ${SeismoLogExcerpt}
+grep -Eh ${LeadingIsoDateRegex} ${XcrptFromTheLog} | date_range_excerpt | sed 'G' >> "${SeismoLogExcerpt}"
+
+echo "~SeismoGraph: Logs scan complete."
+echo "~SeismoGraph: eof" >> ${SeismoRCAReportLog}
+
+}
+#EOF
+#====================
+#====================
 
