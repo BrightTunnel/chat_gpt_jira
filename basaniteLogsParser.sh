@@ -158,7 +158,7 @@ if [[ -n "$LogNames" ]]; then
 			echo "${iso_date} ${log_time} ${rest}"
 			done | date_range_full | grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 1 "$thresholdSys" >> ${SeismoRCAReportLog}
 		#--Save All found Error lines
-		echo -e "\n~SYS logs ERRORS EXCERPT in range from ${RangeHeadDate} ${RangeHeadTime} to ${RangeTailDate} ${RangeTailTime}:${LogNames// /\\n}" >> ${SeismoLogExcerpt}
+		echo -e "\n~SYS logs ERRORS EXCERPT in range from: ${RangeHeadDate} ${RangeHeadTime} to: ${RangeTailDate} ${RangeTailTime}:${LogNames// /\\n}" >> ${SeismoLogExcerpt}
 		grep -Eh ${LeadingDateRegexSlash} ${LogNames} | grep -E ${FilterOR} >> ${SeismoLogExcerpt}
 	elif (( is_web_log == 2 )); then
 		#--From: 12-May-2026 09:24:06.999
@@ -176,6 +176,7 @@ fi
 echo "~Find HOME logs in the range: ${RangeHeadDate}..${RangeTailDate}" #Debug/Verbose
 LogNames=""
 LogNamesArr=()
+lstOfHomeLogFiles=""
 is_range_found=0
 for ((i=0; i<16; i++)); do
 	nextLogName=${APP_MAIN_LOG}
@@ -198,7 +199,8 @@ for ((i=0; i<16; i++)); do
 				LogNames+=" "
 			fi
 			LogNames+="${nextLogName}"
-			echo -e "InTheRange: ${nextLogName} *${FIRST_LINE} - ${LAST_LINE} " #Debug/Verbose
+			lstOfHomeLogFiles+="\n${nextLogName} [${FIRST_LINE}..${LAST_LINE}]"
+			echo -e "InTheRange: ${nextLogName} *${FIRST_LINE} - ${LAST_LINE}" #Debug/Verbose
 		elif [[ ${is_range_found} -eq 1 ]]; then
 			echo -e "OutOfRange: ${nextLogName}  ${FIRST_LINE} - ${LAST_LINE}" #Debug/Verbose
 			#break
@@ -212,7 +214,7 @@ done
 echo "~Parsing HOME logs..." #Debug/Verbose
 if [[ "${#LogNamesArr[@]}" -gt 0 ]]; then
 	echo >> ${SeismoRCAReportLog}
-	echo -e "~HOME logs in range from ${RangeHeadDate} ${RangeHeadTime} to ${RangeTailDate} ${RangeTailTime}:\n${LogNames// /\\n}" >> ${SeismoRCAReportLog}
+	echo -e "~HOME logs in range from: ${RangeHeadDate} ${RangeHeadTime} to: ${RangeTailDate} ${RangeTailTime}:${lstOfHomeLogFiles}" >> ${SeismoRCAReportLog}
 	echo "~Events: ${FilterOR}" >> ${SeismoRCAReportLog}
 	echo "~SeismoGraph:" >> ${SeismoRCAReportLog}
 	grep -Eh ${LeadingIsoDateRegex} ${LogNames} | date_range_full | grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 10 "$thresholdHome" >> ${SeismoRCAReportLog}
