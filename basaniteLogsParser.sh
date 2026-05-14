@@ -2,7 +2,6 @@
 #--Atlassian Application Failure Root Cause Analyzer. Scans local application node logs for fatal error patterns.
 #--SeismoLog by Valeri Tikhonov, TD, May 2026.
 
-
 #bash << 'EOF'
 set enable-bracketed-paste on
 {
@@ -16,7 +15,7 @@ if [[ "$choice" == "JIRA" ]]; then
 	APP_INST="/opt/atlassian/jira/install/logs/"
 	APP_HOME="/opt/atlassian/jira/home/log/"
 	CATALINA_LOG="${APP_INST}catalina." #catalina.2026-03-14.log
-	CATALINA_LOG="${APP_INST}conf_access_log." #conf_access_log.2026-03-14.log (is_web_log=1)
+	CATALINA_LOG="${APP_INST}conf_access_log." #conf_access_log.2026-02-12.log
 	APP_MAIN_LOG="${APP_HOME}atlassian-jira-perf.log"
 	APP_MAIN_LOG="${APP_HOME}atlassian-jira.log"
 	thresholdSys=1
@@ -25,7 +24,7 @@ elif [[ "$choice" == "CONF" ]]; then
 	APP_INST="/opt/atlassian/confluence/install/logs/"
 	APP_HOME="/opt/atlassian/confluence/home/logs/"
 	CATALINA_LOG="${APP_INST}catalina." #catalina.2026-03-14.log
-	CATALINA_LOG="${APP_INST}conf_access_log." #conf_access_log.2026-03-14.log (is_web_log=1)
+	CATALINA_LOG="${APP_INST}conf_access_log." #conf_access_log.2026-02-12.log
 	APP_MAIN_LOG="${APP_HOME}atlassian-confluence.log"
 	thresholdSys=1
 	thresholdHome=20
@@ -36,7 +35,7 @@ elif [[ "$choice" == "DBG" ]]; then
 	APP_HOME="/media/user/Storage/@jira_logs_copy/jira_home/log/"
 	CATALINA_LOG=${2:-/home/user/atlassian-jira-software/logs/catalina.out}
 	CATALINA_LOG="${APP_INST}catalina."
-	CATALINA_LOG="${APP_INST}conf_access_log." #conf_access_log.2026-03-14.log (is_web_log=1)
+	CATALINA_LOG="${APP_INST}conf_access_log." #conf_access_log.2026-02-12.log
 	APP_MAIN_LOG=${1:-/home/user/atlassian-jira-home/log/atlassian-jira.log}
 	APP_MAIN_LOG="${APP_HOME}atlassian-jira.log"
 	thresholdSys=1
@@ -49,8 +48,9 @@ fi
 #catalinaLogName="${CATALINA_LOG##*/}"
 #appLogName="${APP_MAIN_LOG##*/}"
 
-RangeHeadDate="2026-02-11"; RangeHeadTime="00:00"
-RangeTailDate="2026-02-15"; RangeTailTime="23:59"
+
+RangeHeadDate="2026-02-14"; RangeHeadTime="22:55"
+RangeTailDate="2026-02-15"; RangeTailTime="10:33"
 XcrptHeadDateTime="2026-03-08 16:33"
 XcrptTailDateTime="2026-03-08 16:35"
 XcrptFromTheLog="${APP_HOME}atlassian-jira.log.1 ${APP_HOME}atlassian-jira.log.2"
@@ -81,7 +81,7 @@ FilterOR+="|${keywordsMap["PluginFailures"]}"
 FilterOR+="|${keywordsMap["ThreadPoolStarvation"]}"
 FilterOR+="|${keywordsMap["ThreadPoolExecutor"]}"
 #FilterOR+="|WARN|INFO" #Debug/Verbose
-#--Logs: [access_log.2026-05-12, conf_access_log.2026-05-12.log]:
+#--Logs: [access_log.2026-05-12, conf_access_log.2026-02-12.log]:
 FilterOR+="|[[:space:]]HTTP/1.1[[:space:]]4" #[HTTP/1.1 404]
 FilterOR+="|[[:space:]]HTTP/1.1[[:space:]]5" #[HTTP/1.1 504]
 #--Logs: [atlassian-confluence.log]:
@@ -147,7 +147,7 @@ if [[ -n "$LogNames" ]]; then
 	echo -e "~INSTALL logs in range from ${RangeHeadDate} ${RangeHeadTime} to ${RangeTailDate} ${RangeTailTime}:${LogsParsedInfo}" > ${SeismoRCAReportLog}
 	echo "~Events: ${FilterOR}" >> "${SeismoRCAReportLog}"
 	echo "~SeismoGraph:" >> "${SeismoRCAReportLog}"
-	if (( is_web_log )); then
+	if (( is_web_log == 1 )); then
 		#--From: [12/Feb/2026:08:59:58 -0400]
 		grep -Eh "${LeadingDateRegexSlash}" ${LogNames} | while read -r ts_part1 ts_part2 rest; do
 			# ts_part1: [12/Feb/2026:08:59:58
@@ -156,13 +156,14 @@ if [[ -n "$LogNames" ]]; then
 			log_time="${ts_part1#*:}" #Extract time 08:59:58
 			echo "${iso_date} ${log_time} ${rest}"
 			done | date_range_full | grep -E "${FilterOR}" | sort | cut -c 1-16 | uniq -c | print_seismograph 1 "$thresholdSys" >> ${SeismoRCAReportLog}
-	else
+	elif (( is_web_log == 2 )); then
 		#--From: 12-May-2026 09:24:06.999
 		grep -Eh "${LeadingDateRegexDash}" ${LogNames} | while read -r date_str time_str rest; do
 			iso_date=$(convert_java_date_to_iso "${date_str}") #--From: 12-May-2026 09:24:06.999 to 2026-05-12
 			echo "${iso_date} ${time_str} ${rest}"
-			done | date_range_full | grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 1 "$thresholdSys" >> ${SeismoRCAReportLog} 
+			done | date_range_full | grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 1 "$thresholdSys" >> ${SeismoRCAReportLog}
 	fi
+	#--TODO: Save All found Error lines
 else
 	echo "~SeismoGraph~ No INSTALL_LOG data found." >> ${SeismoRCAReportLog}
 fi
@@ -213,11 +214,15 @@ if [[ "${#LogNamesArr[@]}" -gt 0 ]]; then
 	echo "~SeismoGraph:" >> ${SeismoRCAReportLog}
 	grep -Eh ${LeadingIsoDateRegex} ${LogNames} | date_range_full | grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 10 "$thresholdHome" >> ${SeismoRCAReportLog}
 	#--Save All found Error lines
-	echo -e "\n~HOME logs ERROROS EXCERPT in range from ${RangeHeadDate} ${RangeHeadTime} to ${RangeTailDate} ${RangeTailTime}:\n${LogNames// /\\n}" >> ${SeismoLogExcerpt}
-	grep -Eh ${LeadingIsoDateRegex} ${LogNames} | date_range_full | grep -E ${FilterOR} >> ${SeismoLogExcerpt}
+	echo -e "\n~HOME logs ERRORS EXCERPT in range from ${RangeHeadDate} ${RangeHeadTime} to ${RangeTailDate} ${RangeTailTime}:\n${LogNames// /\\n}" >> ${SeismoLogExcerpt}
+	grep -Eh ${LeadingIsoDateRegex} ${LogNames} | date_range_full | grep -E ${FilterOR} | sort >> ${SeismoLogExcerpt}
 else
 	echo "~SeismoGraph~ No HOME_LOG found." >> ${SeismoRCAReportLog}
 fi
+}
+EOF
+#======
+
 
 exit 0
 #-HOME_LOG_NARROW_EXCERPT
@@ -225,12 +230,6 @@ echo "~Extracting Excerpt from the: ${XcrptFromTheLog}..." #Debug/Verbose
 echo -e "~HOME logs NARROW_EXCERPT in range from ${XcrptHeadDateTime} to ${XcrptTailDateTime}:\n${XcrptFromTheLog// /\\n}" > ${SeismoLogExcerpt}
 echo "" >> ${SeismoLogExcerpt}
 grep -Eh ${LeadingIsoDateRegex} ${XcrptFromTheLog} | date_range_excerpt | sed 'G' >> "${SeismoLogExcerpt}"
-
 echo "~SeismoGraph: Logs scan complete."
 echo "~SeismoGraph: eof" >> ${SeismoRCAReportLog}
-
-}
-#EOF
-#====================
-#====================
 
