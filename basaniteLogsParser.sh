@@ -6,8 +6,8 @@
 set enable-bracketed-paste on
 {
 choice="DBG"
-#choice="CONF"
 #choice="JIRA"
+#choice="CONF"
 is_web_log=1
 SeismoRCAReportLog="sseismo_failure-analysis.log"
 SeismoLogExcerpt="seismo_log_excerpt.log"
@@ -49,8 +49,8 @@ fi
 #appLogName="${APP_MAIN_LOG##*/}"
 
 
-RangeHeadDate="2026-02-14"; RangeHeadTime="22:55"
-RangeTailDate="2026-02-15"; RangeTailTime="10:33"
+RangeHeadDate="2026-02-14"; RangeHeadTime="00:00"
+RangeTailDate="2026-02-14"; RangeTailTime="23:59"
 XcrptHeadDateTime="2026-03-08 16:33"
 XcrptTailDateTime="2026-03-08 16:35"
 XcrptFromTheLog="${APP_HOME}atlassian-jira.log.1 ${APP_HOME}atlassian-jira.log.2"
@@ -100,14 +100,24 @@ convert_java_date_to_iso() {
 }
 
 convert_apache_nginx_date_to_iso() {
-	#-- From: [12/Feb/2026:08:59:58 -0400] to 2026-02-12
-	local input_date="${1//[\[\]]/}" #Remove [ and ]
-	input_date="${input_date/:/ }" #Swap first colon (after year) for space
-	local formatted_date
-	if ! formatted_date=$(date -d "${input_date//\//-}" +%F 2>/dev/null); then
-		formatted_date="1970-01-01"
-	fi
-	echo "$formatted_date"
+    # Accept the raw string, e.g., "[12/Feb/2026:08:59:58 -0400]"
+    local input_date="$1"
+    LC_ALL=C sed -E '
+        s|\[?([0-9]{2})/Jan/([0-9]{4}):.*|\2-01-\1|
+        s|\[?([0-9]{2})/Feb/([0-9]{4}):.*|\2-02-\1|
+        s|\[?([0-9]{2})/Mar/([0-9]{4}):.*|\2-03-\1|
+        s|\[?([0-9]{2})/Apr/([0-9]{4}):.*|\2-04-\1|
+        s|\[?([0-9]{2})/May/([0-9]{4}):.*|\2-05-\1|
+        s|\[?([0-9]{2})/Jun/([0-9]{4}):.*|\2-06-\1|
+        s|\[?([0-9]{2})/Jul/([0-9]{4}):.*|\2-07-\1|
+        s|\[?([0-9]{2})/Aug/([0-9]{4}):.*|\2-08-\1|
+        s|\[?([0-9]{2})/Sep/([0-9]{4}):.*|\2-09-\1|
+        s|\[?([0-9]{2})/Oct/([0-9]{4}):.*|\2-10-\1|
+        s|\[?([0-9]{2})/Nov/([0-9]{4}):.*|\2-11-\1|
+        s|\[?([0-9]{2})/Dec/([0-9]{4}):.*|\2-12-\1|
+        #--Fallback if the pattern does not match expected Apache format
+        /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/! s/.*/1970-01-01/
+    ' <<< "$input_date"
 }
 
 print_seismograph() {
