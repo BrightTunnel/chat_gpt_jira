@@ -100,31 +100,31 @@ convert_java_date_to_iso() {
 }
 
 convert_apache_nginx_date_to_iso() {
-    # Accept the raw string, e.g., "[12/Feb/2026:08:59:58 -0400]"
-    local input_date="$1"
-    LC_ALL=C sed -E '
-        s|\[?([0-9]{2})/Jan/([0-9]{4}):.*|\2-01-\1|
-        s|\[?([0-9]{2})/Feb/([0-9]{4}):.*|\2-02-\1|
-        s|\[?([0-9]{2})/Mar/([0-9]{4}):.*|\2-03-\1|
-        s|\[?([0-9]{2})/Apr/([0-9]{4}):.*|\2-04-\1|
-        s|\[?([0-9]{2})/May/([0-9]{4}):.*|\2-05-\1|
-        s|\[?([0-9]{2})/Jun/([0-9]{4}):.*|\2-06-\1|
-        s|\[?([0-9]{2})/Jul/([0-9]{4}):.*|\2-07-\1|
-        s|\[?([0-9]{2})/Aug/([0-9]{4}):.*|\2-08-\1|
-        s|\[?([0-9]{2})/Sep/([0-9]{4}):.*|\2-09-\1|
-        s|\[?([0-9]{2})/Oct/([0-9]{4}):.*|\2-10-\1|
-        s|\[?([0-9]{2})/Nov/([0-9]{4}):.*|\2-11-\1|
-        s|\[?([0-9]{2})/Dec/([0-9]{4}):.*|\2-12-\1|
-        #--Fallback if the pattern does not match expected Apache format
-        /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/! s/.*/1970-01-01/
-    ' <<< "$input_date"
+	# Accept the raw string, e.g., "[12/Feb/2026:08:59:58 -0400]"
+	local input_date="$1"
+	LC_ALL=C sed -E '
+		s|\[?([0-9]{2})/Jan/([0-9]{4}):.*|\2-01-\1|
+		s|\[?([0-9]{2})/Feb/([0-9]{4}):.*|\2-02-\1|
+		s|\[?([0-9]{2})/Mar/([0-9]{4}):.*|\2-03-\1|
+		s|\[?([0-9]{2})/Apr/([0-9]{4}):.*|\2-04-\1|
+		s|\[?([0-9]{2})/May/([0-9]{4}):.*|\2-05-\1|
+		s|\[?([0-9]{2})/Jun/([0-9]{4}):.*|\2-06-\1|
+		s|\[?([0-9]{2})/Jul/([0-9]{4}):.*|\2-07-\1|
+		s|\[?([0-9]{2})/Aug/([0-9]{4}):.*|\2-08-\1|
+		s|\[?([0-9]{2})/Sep/([0-9]{4}):.*|\2-09-\1|
+		s|\[?([0-9]{2})/Oct/([0-9]{4}):.*|\2-10-\1|
+		s|\[?([0-9]{2})/Nov/([0-9]{4}):.*|\2-11-\1|
+		s|\[?([0-9]{2})/Dec/([0-9]{4}):.*|\2-12-\1|
+		#--Fallback if the pattern does not match expected Apache format
+		/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/! s/.*/1970-01-01/
+	' <<< "$input_date"
 }
 
 print_seismograph() {
 	local scale=${1:-10}
 	local threshold=${2:-1}
 	shift; shift #shift arguments so "$@" contains only data
-	awk -v s="$scale" -v t="$threshold" '$1 > t { printf "%s %s\t%s\t", $2, $3, $1; for(i=0; i<$1/s; i++) printf "*"; print "" }' "$@"
+	awk -v s="$scale" -v th="$threshold" '$1 >= th { printf "%s %s\t%s\t", $2, $3, $1; for(i=0; i<$1/s; i++) printf "*"; print "" }' "$@"
 }
 
 date_range_full() {
@@ -157,7 +157,7 @@ echo "~Parsing SYS logs..." #Debug/Verbose
 if [[ -n "$LogNames" ]]; then
 	echo -e "~INSTALL logs in range from ${RangeHeadDate} ${RangeHeadTime} to ${RangeTailDate} ${RangeTailTime}:${LogsParsedInfo}" > ${SeismoRCAReportLog}
 	echo "~Events: ${FilterOR}" >> "${SeismoRCAReportLog}"
-	echo "~SeismoGraph:" >> "${SeismoRCAReportLog}"
+	echo "~SeismoGraph Errors Density (per min):" >> "${SeismoRCAReportLog}"
 	if (( is_web_log == 1 )); then
 		#--From: [12/Feb/2026:08:59:58 -0400]
 		grep -Eh "${LeadingDateRegexSlash}" ${LogNames} | while read -r ts_part1 ts_part2 rest; do
@@ -178,7 +178,7 @@ if [[ -n "$LogNames" ]]; then
 			done | date_range_full | grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 1 "$thresholdSys" >> ${SeismoRCAReportLog}
 	fi
 else
-	echo "~SeismoGraph~ No INSTALL_LOG data found." >> ${SeismoRCAReportLog}
+	echo "~SeismoGraph~ No INSTALL_LOG data found in ${APP_INST}" >> ${SeismoRCAReportLog}
 fi
 
 
@@ -226,7 +226,7 @@ if [[ "${#LogNamesArr[@]}" -gt 0 ]]; then
 	echo >> ${SeismoRCAReportLog}
 	echo -e "~HOME logs in range from: ${RangeHeadDate} ${RangeHeadTime} to: ${RangeTailDate} ${RangeTailTime}:${lstOfHomeLogFiles}" >> ${SeismoRCAReportLog}
 	echo "~Events: ${FilterOR}" >> ${SeismoRCAReportLog}
-	echo "~SeismoGraph:" >> ${SeismoRCAReportLog}
+	echo "~SeismoGraph Errors Density (per min):" >> ${SeismoRCAReportLog}
 	grep -Eh ${LeadingIsoDateRegex} ${LogNames} | date_range_full | grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 10 "$thresholdHome" >> ${SeismoRCAReportLog}
 	#--Save All found Error lines
 	echo -e "\n~HOME logs ERRORS EXCERPT in range from ${RangeHeadDate} ${RangeHeadTime} to ${RangeTailDate} ${RangeTailTime}:\n${LogNames// /\\n}" >> ${SeismoLogExcerpt}
