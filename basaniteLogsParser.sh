@@ -82,8 +82,9 @@ FilterOR+="|${keywordsMap["ThreadPoolStarvation"]}"
 FilterOR+="|${keywordsMap["ThreadPoolExecutor"]}"
 #FilterOR+="|WARN|INFO" #Debug/Verbose
 #--Logs: [access_log.2026-05-12, conf_access_log.2026-02-12.log]:
-FilterOR+="|[[:space:]]HTTP/1.1[[:space:]]4" #[HTTP/1.1 404]
-FilterOR+="|[[:space:]]HTTP/1.1[[:space:]]5" #[HTTP/1.1 504]
+FilterOR+="|[[:space:]]HTTP/1.1[[:space:]]3"
+FilterOR+="|[[:space:]]HTTP/1.1[[:space:]]4" #E.g: [HTTP/1.1 403]
+FilterOR+="|[[:space:]]HTTP/1.1[[:space:]]5"
 #--Logs: [atlassian-confluence.log]:
 FilterOR+="|Failed[[:space:]]to[[:space:]]delete" #WARN: Failed to delete a remote link
 
@@ -155,7 +156,10 @@ if [[ -n "$LogNames" ]]; then
 			iso_date=$(convert_apache_nginx_date_to_iso "${ts_part1} ${ts_part2}")
 			log_time="${ts_part1#*:}" #Extract time 08:59:58
 			echo "${iso_date} ${log_time} ${rest}"
-			done | date_range_full | grep -E "${FilterOR}" | sort | cut -c 1-16 | uniq -c | print_seismograph 1 "$thresholdSys" >> ${SeismoRCAReportLog}
+			done | date_range_full | grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 1 "$thresholdSys" >> ${SeismoRCAReportLog}
+		#--Save All found Error lines
+		echo -e "\n~SYS logs ERRORS EXCERPT in range from ${RangeHeadDate} ${RangeHeadTime} to ${RangeTailDate} ${RangeTailTime}:${LogNames// /\\n}" >> ${SeismoLogExcerpt}
+		grep -Eh ${LeadingDateRegexSlash} ${LogNames} | grep -E ${FilterOR} >> ${SeismoLogExcerpt}
 	elif (( is_web_log == 2 )); then
 		#--From: 12-May-2026 09:24:06.999
 		grep -Eh "${LeadingDateRegexDash}" ${LogNames} | while read -r date_str time_str rest; do
@@ -163,7 +167,6 @@ if [[ -n "$LogNames" ]]; then
 			echo "${iso_date} ${time_str} ${rest}"
 			done | date_range_full | grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 1 "$thresholdSys" >> ${SeismoRCAReportLog}
 	fi
-	#--TODO: Save All found Error lines
 else
 	echo "~SeismoGraph~ No INSTALL_LOG data found." >> ${SeismoRCAReportLog}
 fi
