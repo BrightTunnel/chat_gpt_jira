@@ -1,17 +1,24 @@
-bash << 'EOF'
+#!/bin/bash
+#--Atlassian Application Failure Root Cause Analyzer. Scans local application node logs for fatal error patterns.
+#--SeismoLog by Valeri Tikhonov, TD, May 2026.
+
+#bash << 'EOF'
 set enable-bracketed-paste on
 {
 
-SM_REPORTS_DIR="./seismo_logs"
+SM_REPORTS_DIR="./seismolog"
 if [ ! -d "$SM_REPORTS_DIR" ]; then #Check if the directory does NOT exist
     mkdir -p "$SM_REPORTS_DIR"
 fi
 dtstamp=$(date +"%Y%m%d_%H%M%S")
-SeismoRCAReportLog="${SM_REPORTS_DIR}/sseismo_failure-analysis_${dtstamp}.log"
-SeismoLogExcerpt="${SM_REPORTS_DIR}/eeseismo_errors_excerpt_${dtstamp}.log"
+SeismoRCAReportLog="${SM_REPORTS_DIR}/ddSeismoErrorsDensity_${dtstamp}.log"
+SeismoSysLogExcerpt="${SM_REPORTS_DIR}/eeSeismoErrorsExtract_catalina_${dtstamp}.log"
+SeismoHomeLogExcerpt="${SM_REPORTS_DIR}/eeSeismoErrorsExtract_home_${dtstamp}.log"
 
 is_web_log=1
-choice="CONF"
+#choice="CONF"
+#choice="JIRA"
+choice="DBG"
 if [[ "$choice" == "JIRA" ]]; then
 	APP_INST="/opt/atlassian/jira/install/logs/"
 	APP_HOME="/opt/atlassian/jira/home/log/"
@@ -45,8 +52,8 @@ fi
 #catalinaLogName="${CATALINA_LOG##*/}"
 #appLogName="${APP_MAIN_LOG##*/}"
 
-RangeHeadDate="2026-05-14"; RangeHeadTime="00:00"
-RangeTailDate="2026-05-15"; RangeTailTime="23:59"
+RangeHeadDate="2026-02-14"; RangeHeadTime="00:00"
+RangeTailDate="2026-02-14"; RangeTailTime="23:59"
 XcrptHeadDateTime="2026-03-08 16:33"
 XcrptTailDateTime="2026-03-08 16:35"
 XcrptFromTheLog="${APP_HOME}atlassian-jira.log.1 ${APP_HOME}atlassian-jira.log.2"
@@ -58,38 +65,39 @@ declare -A keywordsMap
 keywordsMap["Atlassian-errors"]="[[:space:]](ERROR|FATAL|SEVERE|CRITICAL)[[:space:]]"
 keywordsMap["Exceptions"]="[A-Za-z0-9\.]+Exception"
 keywordsMap["SlowRESTRequests"]="Request.*took|REQUEST"
-keywordsMap["Cluster-health"]="Cluster.*lost|node.*not[[:space:]]responding|heartbeat|split[[:space:]]brain"
+keywordsMap["Cluster-health"]="Hazelcast|onClusterPanicEvent|Cluster.*lost|node.*not[[:space:]]responding|heartbeat|split[[:space:]]brain"
 keywordsMap["JvmOutOfMemory"]="OutOfMemory|OOM|deadlock|timeout" 
 keywordsMap["DatabaseFailures"]="connection.*fail|database.*down|PSQLException|SQLTransientConnectionException"
 keywordsMap["PluginFailures"]="Plugin.*failed|Unable[[:space:]]to[[:space:]]start[[:space:]]plugin|OSGi|Spring[[:space:]]context[[:space:]]failed"
 keywordsMap["ThreadPoolStarvation"]="Thread.*blocked|StuckThread|thread[[:space:]]starvation|WAITING|BLOCKED"
 keywordsMap["ThreadPoolExecutor"]="max[[:space:]]threads|busy[[:space:]]threads|stuck[[:space:]]thread"
-FilterOR="StuckThreadDetected"
-FilterOR+="|memory[[:space:]]leak"
-FilterOR+="|may[[:space:]]be[[:space:]]stuck"
-FilterOR+="|has[[:space:]]failed"
-FilterOR+="|${keywordsMap["Atlassian-errors"]}"
-FilterOR+="|${keywordsMap["Exceptions"]}"
-FilterOR+="|${keywordsMap["SlowRESTRequests"]}"
-FilterOR+="|${keywordsMap["Cluster-health"]}"
-FilterOR+="|${keywordsMap["JvmOutOfMemory"]}"
-FilterOR+="|${keywordsMap["DatabaseFailures"]}"
-FilterOR+="|${keywordsMap["PluginFailures"]}"
-FilterOR+="|${keywordsMap["ThreadPoolStarvation"]}"
-FilterOR+="|${keywordsMap["ThreadPoolExecutor"]}"
-#FilterOR+="|WARN|INFO" #Debug/Verbose
+keywordsMap["Catalina"]="[[:space:]]HTTP/1.1[[:space:]]3|[[:space:]]HTTP/1.1[[:space:]]4|[[:space:]]HTTP/1.1[[:space:]]5" #[HTTP/1.1 403]
+FilterCatalina="${keywordsMap["Catalina"]}"
+FilterHome="StuckThreadDetected"
+FilterHome+="|memory[[:space:]]leak"
+FilterHome+="|may[[:space:]]be[[:space:]]stuck"
+FilterHome+="|has[[:space:]]failed"
+FilterHome+="|${keywordsMap["Atlassian-errors"]}"
+FilterHome+="|${keywordsMap["Exceptions"]}"
+FilterHome+="|${keywordsMap["SlowRESTRequests"]}"
+FilterHome+="|${keywordsMap["Cluster-health"]}"
+FilterHome+="|${keywordsMap["JvmOutOfMemory"]}"
+FilterHome+="|${keywordsMap["DatabaseFailures"]}"
+FilterHome+="|${keywordsMap["PluginFailures"]}"
+FilterHome+="|${keywordsMap["ThreadPoolStarvation"]}"
+FilterHome+="|${keywordsMap["ThreadPoolExecutor"]}"
+#FilterHome+="|WARN|INFO" #Debug/Verbose
 #--Logs: [access_log.2026-05-12, conf_access_log.2026-02-12.log]:
-FilterOR+="|[[:space:]]HTTP/1.1[[:space:]]3"
-FilterOR+="|[[:space:]]HTTP/1.1[[:space:]]4" #E.g: [HTTP/1.1 403]
-FilterOR+="|[[:space:]]HTTP/1.1[[:space:]]5"
 #--Logs: [atlassian-confluence.log]:
-FilterOR+="|Failed[[:space:]]to[[:space:]]delete" #WARN: Failed to delete a remote link
+FilterHome+="|Failed[[:space:]]to[[:space:]]delete" #WARN: Failed to delete a remote link
 
 LeadingIsoDateRegex="^[0-9]{4}-[0-9]{2}-[0-9]{2}"
 LeadingDateRegexDash="^[0-9]{2}-[A-Z][a-z]{2}-[0-9]{4}" #DD-Mmm-YYYY HH:mm:ss.sss 12-May-2026 09:24:06.999 --Database timestamps, Java/Oracle logs
 LeadingDateRegexSlash="^\[[0-9]{2}/[A-Z][a-z]{2}/[0-9]{4}" #[DD/Mon/YYYY:HH:mm:ss --Apache/Nginx web server logs 
 
 convert_java_date_to_iso() {
+	#--From: 12-May-2026 09:24:06.999 to 2026-05-12
+	#--From: [12/May/2026:09:24:06 -0400] to 2026-05-12
 	formatted_date=$(date -d "$1" +%F 2>/dev/null) || formatted_date="1970-01-01"
 	echo "$formatted_date"
 }
@@ -142,7 +150,7 @@ while [ "${RollingDay}" != "$EndComparison" ]; do
 	if [[ -f "$LogFile" ]]; then
 		LogNames+=" $LogFile"
 		LogsParsedInfo+="\n${LogFile}"
-		echo "InTheRange: ${LogFile}*" #Debug/Verbose
+		echo "InTheRange: ${LogFile} *" #Debug/Verbose
 	else echo "FileNotFnd: $LogFile" >&2
 	fi
 	RollingDay=$(date -d "${RollingDay} + 1 day" +%Y-%m-%d)
@@ -151,11 +159,11 @@ done
 echo "~Parsing SYS logs..." #Debug/Verbose
 if [[ -n "$LogNames" ]]; then
 	echo -e "~INSTALL logs in range from ${RangeHeadDate} ${RangeHeadTime} to ${RangeTailDate} ${RangeTailTime}:${LogsParsedInfo}" > ${SeismoRCAReportLog}
-	echo "~Events: ${FilterOR}" >> "${SeismoRCAReportLog}"
+	echo "~Events: ${FilterCatalina}" >> "${SeismoRCAReportLog}"
 	echo "~SeismoGraph Errors Density (per min):" >> "${SeismoRCAReportLog}"
 	if (( is_web_log == 1 )); then
 		#--From: [12/Feb/2026:08:59:58 -0400]
-		tail ${LogNames} | grep -Eh "${LeadingDateRegexSlash}" | grep -E ${FilterOR} | while read -r ts_part1 ts_part2 rest; do
+		tail ${LogNames} | grep -Eh "${LeadingDateRegexSlash}" | grep -E ${FilterCatalina} | while read -r ts_part1 ts_part2 rest; do
 			# ts_part1: [12/Feb/2026:08:59:58
 			# ts_part2: -0400]
 			iso_date=$(convert_apache_nginx_date_to_iso "${ts_part1} ${ts_part2}")
@@ -163,15 +171,15 @@ if [[ -n "$LogNames" ]]; then
 			echo "${iso_date} ${log_time} ${rest}"
 			done | date_range_full | sort | cut -c 1-16 | uniq -c | print_seismograph 1 "$thresholdSys" >> ${SeismoRCAReportLog}
 		#--Save All found Error lines
-		echo -e "\n~SYS logs ERRORS EXCERPT in range from: ${RangeHeadDate} ${RangeHeadTime} to: ${RangeTailDate} ${RangeTailTime}:${LogNames// /\\n}" >> ${SeismoLogExcerpt}
+		echo -e "\n~SYS logs ERRORS EXCERPT in range from: ${RangeHeadDate} ${RangeHeadTime} to: ${RangeTailDate} ${RangeTailTime}:${LogNames// /\\n}" >> ${SeismoSysLogExcerpt}
 	elif (( is_web_log == 2 )); then
 		#--From: 12-May-2026 09:24:06.999
-		grep -Eh "${LeadingDateRegexDash}" ${LogNames} | grep -E ${FilterOR} | while read -r date_str time_str rest; do
+		grep -Eh "${LeadingDateRegexDash}" ${LogNames} | grep -E ${FilterCatalina} | while read -r date_str time_str rest; do
 			iso_date=$(convert_java_date_to_iso "${date_str}") #--From: 12-May-2026 09:24:06.999 to 2026-05-12
 			echo "${iso_date} ${time_str} ${rest}"
 			done | date_range_full | sort | cut -c 1-16 | uniq -c | print_seismograph 1 "$thresholdSys" >> ${SeismoRCAReportLog}
 	fi
-	grep -Eh ${LeadingDateRegexSlash} ${LogNames} | grep -E ${FilterOR} >> ${SeismoLogExcerpt}
+	grep -Eh ${LeadingDateRegexSlash} ${LogNames} | grep -E ${FilterCatalina} >> ${SeismoSysLogExcerpt}
 else
 	echo "~No access to INSTALL logs at: ${APP_INST}" >> ${SeismoRCAReportLog}
 fi
@@ -205,12 +213,12 @@ for ((i=0; i<16; i++)); do
 			fi
 			LogNames+="${nextLogName}"
 			lstOfHomeLogFiles+="\n${nextLogName} [${FIRST_LINE}..${LAST_LINE}]"
-			echo -e "InTheRange: ${nextLogName} *${FIRST_LINE} - ${LAST_LINE}" #Debug/Verbose
+			echo -e "InTheRange: ${nextLogName} * ${FIRST_LINE} - ${LAST_LINE}" #Debug/Verbose
 		elif [[ ${is_range_found} -eq 1 ]]; then
-			echo -e "OutOfRange: ${nextLogName}  ${FIRST_LINE} - ${LAST_LINE}" #Debug/Verbose
+			echo -e "OutOfRange: ${nextLogName}   ${FIRST_LINE} - ${LAST_LINE}" #Debug/Verbose
 			#break
 		else
-			echo -e "NotInRgYet: ${nextLogName}  ${FIRST_LINE} - ${LAST_LINE}" #Debug/Verbose
+			echo -e "NotInRgYet: ${nextLogName}   ${FIRST_LINE} - ${LAST_LINE}" #Debug/Verbose
 		fi
 	else 
 		echo "FileNotFnd: ${nextLogName}" #Debug/Verbose
@@ -220,15 +228,26 @@ echo "~Parsing HOME logs..." #Debug/Verbose
 if [[ "${#LogNamesArr[@]}" -gt 0 ]]; then
 	echo >> ${SeismoRCAReportLog}
 	echo -e "~HOME logs in range from: ${RangeHeadDate} ${RangeHeadTime} to: ${RangeTailDate} ${RangeTailTime}:${lstOfHomeLogFiles}" >> ${SeismoRCAReportLog}
-	echo "~Events: ${FilterOR}" >> ${SeismoRCAReportLog}
+	echo "~Events: ${FilterHome}" >> ${SeismoRCAReportLog}
 	echo "~SeismoGraph Errors Density (per min):" >> ${SeismoRCAReportLog}
-	grep -Eh ${LeadingIsoDateRegex} ${LogNames} | date_range_full | grep -E ${FilterOR} | sort | cut -c 1-16 | uniq -c | print_seismograph 10 "$thresholdHome" >> ${SeismoRCAReportLog}
+	grep -Eh ${LeadingIsoDateRegex} ${LogNames} | date_range_full | grep -E ${FilterHome} | sort | cut -c 1-16 | uniq -c | print_seismograph 10 "$thresholdHome" >> ${SeismoRCAReportLog}
 	#--Save All found Error lines
-	echo -e "\n~HOME logs ERRORS EXCERPT in range from ${RangeHeadDate} ${RangeHeadTime} to ${RangeTailDate} ${RangeTailTime}:\n${LogNames// /\\n}" >> ${SeismoLogExcerpt}
-	grep -Eh ${LeadingIsoDateRegex} ${LogNames} | date_range_full | grep -E ${FilterOR} | sort >> ${SeismoLogExcerpt}
+	echo -e "\n~HOME logs ERRORS EXCERPT in range from ${RangeHeadDate} ${RangeHeadTime} to ${RangeTailDate} ${RangeTailTime}:\n${LogNames// /\\n}" >> ${SeismoHomeLogExcerpt}
+	grep -Eh ${LeadingIsoDateRegex} ${LogNames} | date_range_full | grep -E ${FilterHome} | sort >> ${SeismoHomeLogExcerpt}
 else
 	echo "~No access to HOME logs at: ${APP_HOME}" >> ${SeismoRCAReportLog}
 fi
 }
-EOF
+#EOF
 #======
+
+
+exit 0
+#-HOME_LOG_NARROW_EXCERPT
+echo "~Extracting Excerpt from the: ${XcrptFromTheLog}..." #Debug/Verbose
+echo -e "~HOME logs NARROW_EXCERPT in range from ${XcrptHeadDateTime} to ${XcrptTailDateTime}:\n${XcrptFromTheLog// /\\n}" > ${SeismoHomeLogExcerpt}
+echo "" >> ${SeismoHomeLogExcerpt}
+grep -Eh ${LeadingIsoDateRegex} ${XcrptFromTheLog} | date_range_excerpt | sed 'G' >> "${SeismoHomeLogExcerpt}"
+echo "~SeismoGraph: Logs scan complete."
+echo "~SeismoGraph: eof" >> ${SeismoRCAReportLog}
+
