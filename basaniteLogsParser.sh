@@ -161,7 +161,8 @@ if [[ -n "$LogNames" ]]; then
 	echo "~SeismoGraph Errors Density (per min):" >> "${SeismoRCAReportLog}"
 	if (( is_web_log == 1 )); then
 		#--From: [12/Feb/2026:08:59:58 -0400]
-		tail -n ${tailLength} ${LogNames} | grep -Eh "${LeadingDateRegexSlash}" | grep -E ${FilterOR} | while read -r ts_part1 ts_part2 rest; do
+		#tail -n ${tailLength} ${LogNames} | grep -Eh "${LeadingDateRegexSlash}" | grep -E ${FilterOR} | while read -r ts_part1 ts_part2 rest; do
+		tail ${LogNames} | grep -Eh "${LeadingDateRegexSlash}" | grep -E ${FilterOR} | while read -r ts_part1 ts_part2 rest; do
 			# ts_part1: [12/Feb/2026:08:59:58
 			# ts_part2: -0400]
 			iso_date=$(convert_apache_nginx_date_to_iso "${ts_part1} ${ts_part2}")
@@ -179,7 +180,7 @@ if [[ -n "$LogNames" ]]; then
 	fi
 	grep -Eh ${LeadingDateRegexSlash} ${LogNames} | grep -E ${FilterOR} >> ${SeismoLogExcerpt}
 else
-	echo "~SeismoGraph~ No INSTALL_LOG data found in ${APP_INST}" >> ${SeismoRCAReportLog}
+	echo "~No INSTALL_LOG data found in ${APP_INST}" >> ${SeismoRCAReportLog}
 fi
 
 
@@ -233,10 +234,10 @@ if [[ "${#LogNamesArr[@]}" -gt 0 ]]; then
 	echo -e "\n~HOME logs ERRORS EXCERPT in range from ${RangeHeadDate} ${RangeHeadTime} to ${RangeTailDate} ${RangeTailTime}:\n${LogNames// /\\n}" >> ${SeismoLogExcerpt}
 	grep -Eh ${LeadingIsoDateRegex} ${LogNames} | date_range_full | grep -E ${FilterOR} | sort >> ${SeismoLogExcerpt}
 else
-	echo "~SeismoGraph~ No HOME_LOG found." >> ${SeismoRCAReportLog}
+	echo "~No HOME_LOG data found in ${APP_HOME}" >> ${SeismoRCAReportLog}
 fi
 }
-EOF
+#EOF
 #======
 
 
