@@ -54,7 +54,7 @@ RangeTailDate="2026-02-14"; RangeTailTime="23:59"
 XcrptHeadDateTime="2026-03-08 16:33"
 XcrptTailDateTime="2026-03-08 16:35"
 XcrptFromTheLog="${APP_HOME}atlassian-jira.log.1 ${APP_HOME}atlassian-jira.log.2"
-tailLength=2000 #Allow to read only last ${tailLength} lines of the huge log 
+#tailLength=2000 #Allow to read only last ${tailLength} lines of the huge log 
 
 RangeHeadEpoch=$(date -d "${RangeHeadDate} ${RangeHeadTime}" +%s)
 RangeTailEpoch=$(date -d "${RangeTailDate} ${RangeTailTime}" +%s)
@@ -161,7 +161,6 @@ if [[ -n "$LogNames" ]]; then
 	echo "~SeismoGraph Errors Density (per min):" >> "${SeismoRCAReportLog}"
 	if (( is_web_log == 1 )); then
 		#--From: [12/Feb/2026:08:59:58 -0400]
-		#tail -n ${tailLength} ${LogNames} | grep -Eh "${LeadingDateRegexSlash}" | grep -E ${FilterOR} | while read -r ts_part1 ts_part2 rest; do
 		tail ${LogNames} | grep -Eh "${LeadingDateRegexSlash}" | grep -E ${FilterOR} | while read -r ts_part1 ts_part2 rest; do
 			# ts_part1: [12/Feb/2026:08:59:58
 			# ts_part2: -0400]
