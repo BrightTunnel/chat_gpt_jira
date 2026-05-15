@@ -1,16 +1,17 @@
-#!/bin/bash
-#--Atlassian Application Failure Root Cause Analyzer. Scans local application node logs for fatal error patterns.
-#--SeismoLog by Valeri Tikhonov, TD, May 2026.
-
-#bash << 'EOF'
+bash << 'EOF'
 set enable-bracketed-paste on
 {
-choice="DBG"
-#choice="JIRA"
-#choice="CONF"
+
+SM_REPORTS_DIR="./seismo_logs"
+if [ ! -d "$SM_REPORTS_DIR" ]; then #Check if the directory does NOT exist
+    mkdir -p "$SM_REPORTS_DIR"
+fi
+dtstamp=$(date +"%Y%m%d_%H%M%S")
+SeismoRCAReportLog="${SM_REPORTS_DIR}/sseismo_failure-analysis_${dtstamp}.log"
+SeismoLogExcerpt="${SM_REPORTS_DIR}/eeseismo_errors_excerpt_${dtstamp}.log"
+
 is_web_log=1
-SeismoRCAReportLog="sseismo_failure-analysis.log"
-SeismoLogExcerpt="seismo_log_excerpt.log"
+choice="CONF"
 if [[ "$choice" == "JIRA" ]]; then
 	APP_INST="/opt/atlassian/jira/install/logs/"
 	APP_HOME="/opt/atlassian/jira/home/log/"
@@ -40,17 +41,12 @@ elif [[ "$choice" == "DBG" ]]; then
 	APP_MAIN_LOG="${APP_HOME}atlassian-jira.log"
 	thresholdSys=1
 	thresholdHome=1
-	REPORTS="/media/user/Storage/lenovo-storage/@Mobile/@Wiki/Projects/@Java/@Jira/temp_collection_of_scripts_to_be_sorted/bash/tmp/seismo_FailureRCAnalysis_$(date +%Y%m%d-%H%M%S)/"
-	mkdir -p "${REPORTS}"
-	SeismoRCAReportLog="${REPORTS}sseismo_failure-analysis.log"
-	SeismoLogExcerpt="${REPORTS}seismo_log_excerpt.log"
 fi
 #catalinaLogName="${CATALINA_LOG##*/}"
 #appLogName="${APP_MAIN_LOG##*/}"
 
-
-RangeHeadDate="2026-02-14"; RangeHeadTime="00:00"
-RangeTailDate="2026-02-14"; RangeTailTime="23:59"
+RangeHeadDate="2026-05-14"; RangeHeadTime="00:00"
+RangeTailDate="2026-05-15"; RangeTailTime="23:59"
 XcrptHeadDateTime="2026-03-08 16:33"
 XcrptTailDateTime="2026-03-08 16:35"
 XcrptFromTheLog="${APP_HOME}atlassian-jira.log.1 ${APP_HOME}atlassian-jira.log.2"
@@ -94,8 +90,6 @@ LeadingDateRegexDash="^[0-9]{2}-[A-Z][a-z]{2}-[0-9]{4}" #DD-Mmm-YYYY HH:mm:ss.ss
 LeadingDateRegexSlash="^\[[0-9]{2}/[A-Z][a-z]{2}/[0-9]{4}" #[DD/Mon/YYYY:HH:mm:ss --Apache/Nginx web server logs 
 
 convert_java_date_to_iso() {
-	#--From: 12-May-2026 09:24:06.999 to 2026-05-12
-	#--From: [12/May/2026:09:24:06 -0400] to 2026-05-12
 	formatted_date=$(date -d "$1" +%F 2>/dev/null) || formatted_date="1970-01-01"
 	echo "$formatted_date"
 }
@@ -179,7 +173,7 @@ if [[ -n "$LogNames" ]]; then
 	fi
 	grep -Eh ${LeadingDateRegexSlash} ${LogNames} | grep -E ${FilterOR} >> ${SeismoLogExcerpt}
 else
-	echo "~No INSTALL_LOG data found in ${APP_INST}" >> ${SeismoRCAReportLog}
+	echo "~No access to INSTALL logs at: ${APP_INST}" >> ${SeismoRCAReportLog}
 fi
 
 
@@ -233,19 +227,8 @@ if [[ "${#LogNamesArr[@]}" -gt 0 ]]; then
 	echo -e "\n~HOME logs ERRORS EXCERPT in range from ${RangeHeadDate} ${RangeHeadTime} to ${RangeTailDate} ${RangeTailTime}:\n${LogNames// /\\n}" >> ${SeismoLogExcerpt}
 	grep -Eh ${LeadingIsoDateRegex} ${LogNames} | date_range_full | grep -E ${FilterOR} | sort >> ${SeismoLogExcerpt}
 else
-	echo "~No HOME_LOG data found in ${APP_HOME}" >> ${SeismoRCAReportLog}
+	echo "~No access to HOME logs at: ${APP_HOME}" >> ${SeismoRCAReportLog}
 fi
 }
-#EOF
+EOF
 #======
-
-
-exit 0
-#-HOME_LOG_NARROW_EXCERPT
-echo "~Extracting Excerpt from the: ${XcrptFromTheLog}..." #Debug/Verbose
-echo -e "~HOME logs NARROW_EXCERPT in range from ${XcrptHeadDateTime} to ${XcrptTailDateTime}:\n${XcrptFromTheLog// /\\n}" > ${SeismoLogExcerpt}
-echo "" >> ${SeismoLogExcerpt}
-grep -Eh ${LeadingIsoDateRegex} ${XcrptFromTheLog} | date_range_excerpt | sed 'G' >> "${SeismoLogExcerpt}"
-echo "~SeismoGraph: Logs scan complete."
-echo "~SeismoGraph: eof" >> ${SeismoRCAReportLog}
-
