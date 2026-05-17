@@ -83,9 +83,8 @@ FilterHomeRest+="|${keywordsMap["JvmOutOfMemory"]}"
 FilterHomeRest+="|${keywordsMap["PluginFailures"]}"
 FilterHomeRest+="|${keywordsMap["ThreadPoolExecutor"]}"
 FilterHomeRest+="|${keywordsMap["SlowRESTRequests"]}"
-FilterHomeRest+="|${keywordsMap["ThreadPoolStarvation"]}"
-#FilterHomeThread="${keywordsMap["ThreadPoolStarvation"]}"
-FilterHomeDbase="${keywordsMap["DatabaseFailures"]}"
+FilterHomeClogging="${keywordsMap["DatabaseFailures"]}"
+FilterHomeClogging+="|${keywordsMap["ThreadPoolStarvation"]}"
 FilterCatalina="${keywordsMap["Catalina"]}"
 
 LeadingIsoDateRegex="^[0-9]{4}-[0-9]{2}-[0-9]{2}"
@@ -159,7 +158,7 @@ echo "~Parsing SYS logs..." #Debug/Verbose
 if [[ -n "$LogNames" ]]; then
 	echo -e "~INSTALL logs in range from ${RangeHeadDate} ${RangeHeadTime} to ${RangeTailDate} ${RangeTailTime}:${LogsParsedInfo}" > ${SeismoRCAReportLog}
 	echo "~Events: ${FilterCatalina}" >> "${SeismoRCAReportLog}"
-	echo -e "~SeismoGraph Events Density (events per min):\n" >> "${SeismoRCAReportLog}"
+	echo -e "~Events Density (events per min):\n" >> "${SeismoRCAReportLog}"
 	if (( is_web_log == 1 )); then
 		#--From: [12/Feb/2026:08:59:58 -0400]
 		tail ${LogNames} | grep -Eh "${LeadingDateRegexSlash}" | grep -E ${FilterCatalina} | while read -r ts_part1 ts_part2 rest; do
@@ -227,20 +226,22 @@ echo "~Parsing HOME logs..." #Debug/Verbose
 if [[ "${#LogNamesArr[@]}" -gt 0 ]]; then
 	echo >> ${SeismoRCAReportLog}
 	echo -e "~HOME logs in range from: ${RangeHeadDate} ${RangeHeadTime} to: ${RangeTailDate} ${RangeTailTime}:${lstOfHomeLogFiles}" >> ${SeismoRCAReportLog}
-	echo "~Events: ${FilterHomeRest}" >> ${SeismoRCAReportLog}
-	echo -e "~SeismoGraph Events Density (events per min):\n" >> ${SeismoRCAReportLog}
+	echo "~Chart Legend: [(*) Clogging, (.) Other Errors], Filters detailes:" >> ${SeismoRCAReportLog}
+	echo " * ${FilterHomeClogging}" >> ${SeismoRCAReportLog}
+	echo " . ${FilterHomeRest}" >> ${SeismoRCAReportLog}
+	echo -e "~Events Density (events per min):\n" >> ${SeismoRCAReportLog}
 
 	#Capture the base filtered logs completely in RAM memory
 	INITIAL_LOGS=$(grep -Eh "${LeadingIsoDateRegex}" ${LogNames} | date_range_full)
 	#--Line-by-line horizontal merge using proper subshell process substitution
 	join -a1 -a2 -e "" -o '0,1.2,2.2' \
-		<(echo "${INITIAL_LOGS}" | grep -E "${FilterHomeRest}" | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdHome" "*") \
-		<(echo "${INITIAL_LOGS}" | grep -E "${FilterHomeDbase}" | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdHome" "D") |
+		<(echo "${INITIAL_LOGS}" | grep -E "${FilterHomeRest}" | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdHome" ".") \
+		<(echo "${INITIAL_LOGS}" | grep -E "${FilterHomeClogging}" | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdHome" "*") |
 	sort >> "${SeismoRCAReportLog}"
 
 	#--Save all error lines
 	echo -e "\n~HOME logs ERRORS EXCERPT in range from ${RangeHeadDate} ${RangeHeadTime} to ${RangeTailDate} ${RangeTailTime}:\n${lstOfHomeLogFiles}\n" >> ${SeismoHomeLogExcerpt}
-	grep -Eh ${LeadingIsoDateRegex} ${LogNames} | date_range_full | grep -E "${FilterHomeRest}|${FilterHomeDbase}" | sort >> ${SeismoHomeLogExcerpt}
+	grep -Eh ${LeadingIsoDateRegex} ${LogNames} | date_range_full | grep -E "${FilterHomeRest}|${FilterHomeClogging}" | sort >> ${SeismoHomeLogExcerpt}
 else
 	echo "~No access to HOME logs at: ${APP_HOME}" >> ${SeismoRCAReportLog}
 fi
