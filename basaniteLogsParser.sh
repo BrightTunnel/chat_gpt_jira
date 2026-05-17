@@ -1,12 +1,13 @@
-
+start_time=$(date +%s%N) #--start time in nanoseconds
 SM_REPORTS_DIR="./seismolog"
 if [ ! -d "$SM_REPORTS_DIR" ]; then #Check if the directory does NOT exist
 	mkdir -p "$SM_REPORTS_DIR"
 fi
 dtstamp=$(date +"%Y%m%d-%H%M")
-SeismoRCAReportLog="${SM_REPORTS_DIR}/seismoErrorsDensity_${dtstamp}.log"
-SeismoSysLogExcerpt="${SM_REPORTS_DIR}/seismoErrorsCatExtract_${dtstamp}.log"
-SeismoHomeLogExcerpt="${SM_REPORTS_DIR}/seismoErrorsHomeExtract_${dtstamp}.log"
+SeismoErrorsDensity="${SM_REPORTS_DIR}/seismoErrorsDensity_${dtstamp}.log"
+SeismoErrorsSysExtract="${SM_REPORTS_DIR}/seismoErrorsSysExtract_${dtstamp}.log"
+SeismoErrorsHomeExtract="${SM_REPORTS_DIR}/seismoErrorsHomeExtract_${dtstamp}.log"
+SeismoFullNarrowExcerpt="${SM_REPORTS_DIR}/seismoFullNarrowExcerpt_${dtstamp}.log"
 
 is_web_log=1
 choice="CONF"
@@ -46,11 +47,11 @@ fi
 #catalinaLogName="${CATALINA_LOG##*/}"
 #appLogName="${APP_MAIN_LOG##*/}"
 
-RangeHeadDate="2026-05-16"; RangeHeadTime="00:01"
+RangeHeadDate="2026-01-16"; RangeHeadTime="00:01"
 RangeTailDate="2026-05-16"; RangeTailTime="23:59"
 XcrptHeadDateTime="2026-03-08 16:33"
 XcrptTailDateTime="2026-03-08 16:35"
-XcrptFromTheLog="${APP_HOME}atlassian-jira.log.1 ${APP_HOME}atlassian-jira.log.2"
+XcrptFromTheLog="${APP_HOME}atlassian-jira.log ${APP_HOME}atlassian-jira.log.1"
 #tailLength=2000 #Allow to read only last ${tailLength} lines of the huge log 
 
 RangeHeadEpoch=$(date -d "${RangeHeadDate} ${RangeHeadTime}" +%s)
@@ -78,11 +79,13 @@ FilterHomeClogging="${keywordsMap["DatabaseFailures"]}"
 FilterHomeClogging+="|${keywordsMap["ThreadPoolStarvation"]}"
 FilterCatalina="${keywordsMap["Catalina"]}"
 
-LeadingIsoDateRegex="^[0-9]{4}-[0-9]{2}-[0-9]{2}"
+LeadingIsoDateRegex="^[0-9]{4}-[0-9]{2}-[0-9]{2}" #YYYY-MM-DD HH:mm:ss
 LeadingDateRegexDash="^[0-9]{2}-[A-Z][a-z]{2}-[0-9]{4}" #DD-Mmm-YYYY HH:mm:ss.sss 12-May-2026 09:24:06.999 --Database timestamps, Java/Oracle logs
 LeadingDateRegexSlash="^\[[0-9]{2}/[A-Z][a-z]{2}/[0-9]{4}" #[DD/Mon/YYYY:HH:mm:ss --Apache/Nginx web server logs 
 
 convert_java_date_to_iso() {
+	#--From: 12-May-2026 09:24:06.999 to 2026-05-12
+	#--From: [12/May/2026:09:24:06 -0400] to 2026-05-12
 	formatted_date=$(date -d "$1" +%F 2>/dev/null) || formatted_date="1970-01-01"
 	echo "$formatted_date"
 }
@@ -129,7 +132,7 @@ date_range_excerpt() {
 #--SYS TOMCAT INSTALL_LOG
 echo "~Find SYS logs in the range: ${RangeHeadDate}..${RangeTailDate}" #Debug/Verbose
 RollingDay=${RangeHeadDate}
-LogNames="" 
+LogNames=""
 LogsParsedInfo=""
 EndComparison=$(date -d "${RangeTailDate} + 1 day" +%Y-%m-%d)
 while [ "${RollingDay}" != "$EndComparison" ]; do
@@ -145,9 +148,9 @@ done
 
 echo "~Parsing SYS logs..." #Debug/Verbose
 if [[ -n "$LogNames" ]]; then
-	echo -e "~INSTALL logs in range from ${RangeHeadDate} ${RangeHeadTime} to ${RangeTailDate} ${RangeTailTime}:${LogsParsedInfo}" > ${SeismoRCAReportLog}
-	echo "~Events: ${FilterCatalina}" >> "${SeismoRCAReportLog}"
-	echo -e "~Events Density (events per min):\n" >> "${SeismoRCAReportLog}"
+	echo -e "~INSTALL logs in range from ${RangeHeadDate} ${RangeHeadTime} to ${RangeTailDate} ${RangeTailTime}:${LogsParsedInfo}" > ${SeismoErrorsDensity}
+	echo "~Events: ${FilterCatalina}" >> "${SeismoErrorsDensity}"
+	echo -e "~Events Density (events per min):\n" >> "${SeismoErrorsDensity}"
 	if (( is_web_log == 1 )); then
 		#--From: [12/Feb/2026:08:59:58 -0400]
 		tail ${LogNames} | grep -Eh "${LeadingDateRegexSlash}" | grep -E ${FilterCatalina} | while read -r ts_part1 ts_part2 rest; do
@@ -156,19 +159,19 @@ if [[ -n "$LogNames" ]]; then
 			iso_date=$(convert_apache_nginx_date_to_iso "${ts_part1} ${ts_part2}")
 			log_time="${ts_part1#*:}" #Extract time 08:59:58
 			echo "${iso_date} ${log_time} ${rest}"
-			done | date_range_full | sort | cut -c 1-16 | uniq -c | print_seismographFullLine 1 "$thresholdSys" "*" >> ${SeismoRCAReportLog}
-		#--Save All found Error lines
-		echo -e "\n~SYS logs ERRORS EXCERPT in range from: ${RangeHeadDate} ${RangeHeadTime} to: ${RangeTailDate} ${RangeTailTime}:${LogNames// /\\n}\n" >> ${SeismoSysLogExcerpt}
+			done | date_range_full | sort | cut -c 1-16 | uniq -c | print_seismographFullLine 1 "$thresholdSys" "*" >> ${SeismoErrorsDensity}
 	elif (( is_web_log == 2 )); then
 		#--From: 12-May-2026 09:24:06.999
 		grep -Eh "${LeadingDateRegexDash}" ${LogNames} | grep -E ${FilterCatalina} | while read -r date_str time_str rest; do
 			iso_date=$(convert_java_date_to_iso "${date_str}") #--From: 12-May-2026 09:24:06.999 to 2026-05-12
 			echo "${iso_date} ${time_str} ${rest}"
-			done | date_range_full | sort | cut -c 1-16 | uniq -c | print_seismographFullLine 1 "$thresholdSys" "*" >> ${SeismoRCAReportLog}
+			done | date_range_full | sort | cut -c 1-16 | uniq -c | print_seismographFullLine 1 "$thresholdSys" "*" >> ${SeismoErrorsDensity}
 	fi
-	grep -Eh ${LeadingDateRegexSlash} ${LogNames} | grep -E ${FilterCatalina} >> ${SeismoSysLogExcerpt}
+	#--Save All found Error lines
+	echo -e "\n~SYS logs ERRORS EXCERPT in range from: ${RangeHeadDate} ${RangeHeadTime} to: ${RangeTailDate} ${RangeTailTime}:${LogNames// /\\n}\n" >> ${SeismoErrorsSysExtract}
+	grep -Eh ${LeadingDateRegexSlash} ${LogNames} | grep -E ${FilterCatalina} >> ${SeismoErrorsSysExtract}
 else
-	echo "~No access to INSTALL logs at: ${APP_INST}" >> ${SeismoRCAReportLog}
+	echo "~No access to INSTALL logs at: ${APP_INST}" >> ${SeismoErrorsDensity}
 fi
 
 
@@ -182,7 +185,7 @@ for ((i=0; i<16; i++)); do
 	nextLogName=${APP_MAIN_LOG}
 	if [[ i -gt 0 ]]; then
 		nextLogName+=".${i}"
-	fi	
+	fi
 	if [[ -f "${nextLogName}" ]]; then
 		#Check if log file contains target dates range. Get first and last timestamp from file
 		FIRST_LINE=$(head -n 100 "${nextLogName}" | grep -m 1 "^[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}" | awk '{print $1,$2}' | cut -d',' -f1)
@@ -207,30 +210,44 @@ for ((i=0; i<16; i++)); do
 		else
 			echo -e "NotInRgYet: ${nextLogName}   ${FIRST_LINE} - ${LAST_LINE}" #Debug/Verbose
 		fi
-	else 
+	else
 		echo "FileNotFnd: ${nextLogName}" #Debug/Verbose
 	fi
 done
 echo "~Parsing HOME logs..." #Debug/Verbose
 if [[ "${#LogNamesArr[@]}" -gt 0 ]]; then
-	echo >> ${SeismoRCAReportLog}
-	echo -e "~HOME logs in range from: ${RangeHeadDate} ${RangeHeadTime} to: ${RangeTailDate} ${RangeTailTime}:${lstOfHomeLogFiles}" >> ${SeismoRCAReportLog}
-	echo "~Chart Legend: [(*) Clogging, (.) Other Errors], Filters detailes:" >> ${SeismoRCAReportLog}
-	echo " * ${FilterHomeClogging}" >> ${SeismoRCAReportLog}
-	echo " . ${FilterHomeRest}" >> ${SeismoRCAReportLog}
-	echo -e "~Events Density (events per min):\n" >> ${SeismoRCAReportLog}
+	echo -e "\n~HOME logs in range from: ${RangeHeadDate} ${RangeHeadTime} to: ${RangeTailDate} ${RangeTailTime}:${lstOfHomeLogFiles}" >> ${SeismoErrorsDensity}
+	echo "~Chart Legend: [(*) Clogging, (.) Other Errors], Filters detailes:" >> ${SeismoErrorsDensity}
+	echo " * ${FilterHomeClogging}" >> ${SeismoErrorsDensity}
+	echo " . ${FilterHomeRest}" >> ${SeismoErrorsDensity}
+	echo -e "~Events Density (events per min):\n" >> ${SeismoErrorsDensity}
 
-	#Capture the base filtered logs completely in RAM memory
-	INITIAL_LOGS=$(grep -Eh "${LeadingIsoDateRegex}" ${LogNames} | date_range_full)
-	#--Line-by-line horizontal merge using proper subshell process substitution
+	INITIAL_LOGS=$(grep -Eh "${LeadingIsoDateRegex}" ${LogNames} | date_range_full) #Capture the base filtered logs in RAM
+	#--Line-by-line horizontal merge using subshell process substitution, #idex 0: YYYY-MM-DD_HH:mm (e.g: 2026-05-16_14:06)
 	join -a1 -a2 -e "" -o '0,1.2,2.2' \
 		<(echo "${INITIAL_LOGS}" | grep -E "${FilterHomeRest}" | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdHome" ".") \
 		<(echo "${INITIAL_LOGS}" | grep -E "${FilterHomeClogging}" | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdHome" "*") |
-	sort >> "${SeismoRCAReportLog}"
+	sort >> "${SeismoErrorsDensity}"
 
 	#--Save all error lines
-	echo -e "\n~HOME logs ERRORS EXCERPT in range from ${RangeHeadDate} ${RangeHeadTime} to ${RangeTailDate} ${RangeTailTime}:\n${lstOfHomeLogFiles}\n" >> ${SeismoHomeLogExcerpt}
-	grep -Eh ${LeadingIsoDateRegex} ${LogNames} | date_range_full | grep -E "${FilterHomeRest}|${FilterHomeClogging}" | sort >> ${SeismoHomeLogExcerpt}
+	echo -e "\n~HOME logs ERRORS EXCERPT in range from ${RangeHeadDate} ${RangeHeadTime} to ${RangeTailDate} ${RangeTailTime}:\n${lstOfHomeLogFiles}\n" >> ${SeismoErrorsHomeExtract}
+	grep -Eh ${LeadingIsoDateRegex} ${LogNames} | date_range_full | grep -E "${FilterHomeRest}|${FilterHomeClogging}" | sort >> ${SeismoErrorsHomeExtract}
 else
-	echo "~No access to HOME logs at: ${APP_HOME}" >> ${SeismoRCAReportLog}
+	echo "~No access to HOME logs at: ${APP_HOME}" >> ${SeismoErrorsDensity}
 fi
+}
+#EOF
+#======
+
+
+#exit 0
+#-HOME_LOG_FULL_NARROW_EXCERPT
+echo -e "~HOME logs FULL_NARROW_EXCERPT in range from ${XcrptHeadDateTime} to ${XcrptTailDateTime}:\n${XcrptFromTheLog// /\\n}" > ${SeismoFullNarrowExcerpt}
+echo "" >> ${SeismoFullNarrowExcerpt}
+grep -Eh ${LeadingIsoDateRegex} ${XcrptFromTheLog} | date_range_excerpt >> "${SeismoFullNarrowExcerpt}"
+#grep -Eh ${LeadingIsoDateRegex} ${XcrptFromTheLog} | date_range_excerpt | sed 'G' >> "${SeismoFullNarrowExcerpt}" #With Extra \n
+
+
+#--Script execution time
+elapsed=$(( ($(date +%s%N) - start_time) / 1000000000 )); min=$(( elapsed / 60 )); sec=$(( elapsed % 60 ))
+echo "Execution time: ${min} minutes ${sec} seconds"
