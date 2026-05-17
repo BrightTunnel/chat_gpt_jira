@@ -1,3 +1,11 @@
+#!/bin/bash
+#--Atlassian Application Failure Root Cause Analyzer. Scans local application node logs for fatal error patterns.
+#--SeismoLog by Valeri Tikhonov, TD, May 2026.
+
+#bash << 'EOF'
+set enable-bracketed-paste on
+{
+
 start_time=$(date +%s%N) #--start time in nanoseconds
 SM_REPORTS_DIR="./seismolog"
 if [ ! -d "$SM_REPORTS_DIR" ]; then #Check if the directory does NOT exist
@@ -10,7 +18,9 @@ SeismoErrorsHomeExtract="${SM_REPORTS_DIR}/seismoErrorsHomeExtract_${dtstamp}.lo
 SeismoFullNarrowExcerpt="${SM_REPORTS_DIR}/seismoFullNarrowExcerpt_${dtstamp}.log"
 
 is_web_log=1
-choice="CONF"
+#choice="CONF"
+#choice="JIRA"
+choice="DBG"
 if [[ "$choice" == "JIRA" ]]; then
 	APP_INST="/opt/atlassian/jira/install/logs/"
 	APP_HOME="/opt/atlassian/jira/home/log/"
@@ -174,6 +184,9 @@ else
 	echo "~No access to INSTALL logs at: ${APP_INST}" >> ${SeismoErrorsDensity}
 fi
 
+elapsed=$(( ($(date +%s%N) - start_time) / 1000000000 )); min=$(( elapsed / 60 )); sec=$(( elapsed % 60 ))
+echo "~Sys Execution time: ${min} minutes ${sec} seconds"
+
 
 #--HOME_LOG
 echo "~Find HOME logs in the range: ${RangeHeadDate}..${RangeTailDate}" #Debug/Verbose
@@ -235,6 +248,11 @@ if [[ "${#LogNamesArr[@]}" -gt 0 ]]; then
 else
 	echo "~No access to HOME logs at: ${APP_HOME}" >> ${SeismoErrorsDensity}
 fi
+
+elapsed=$(( ($(date +%s%N) - start_time) / 1000000000 )); min=$(( elapsed / 60 )); sec=$(( elapsed % 60 ))
+echo "~Home Execution time: ${min} minutes ${sec} seconds"
+
+
 }
 #EOF
 #======
@@ -242,6 +260,7 @@ fi
 
 #exit 0
 #-HOME_LOG_FULL_NARROW_EXCERPT
+echo "~Save HOME logs NARROW_EXCERPT in the range: ${XcrptHeadDateTime}..${XcrptTailDateTime}" #Debug/Verbose
 echo -e "~HOME logs FULL_NARROW_EXCERPT in range from ${XcrptHeadDateTime} to ${XcrptTailDateTime}:\n${XcrptFromTheLog// /\\n}" > ${SeismoFullNarrowExcerpt}
 echo "" >> ${SeismoFullNarrowExcerpt}
 grep -Eh ${LeadingIsoDateRegex} ${XcrptFromTheLog} | date_range_excerpt >> "${SeismoFullNarrowExcerpt}"
@@ -250,4 +269,4 @@ grep -Eh ${LeadingIsoDateRegex} ${XcrptFromTheLog} | date_range_excerpt >> "${Se
 
 #--Script execution time
 elapsed=$(( ($(date +%s%N) - start_time) / 1000000000 )); min=$(( elapsed / 60 )); sec=$(( elapsed % 60 ))
-echo "Execution time: ${min} minutes ${sec} seconds"
+echo "~Overall Execution time: ${min} minutes ${sec} seconds"
