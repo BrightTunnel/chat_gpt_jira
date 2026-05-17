@@ -1,10 +1,3 @@
-#!/bin/bash
-#--Atlassian Application Failure Root Cause Analyzer. Scans local application node logs for fatal error patterns.
-#--SeismoLog by Valeri Tikhonov, TD, May 2026.
-
-#bash << 'EOF'
-set enable-bracketed-paste on
-{
 
 SM_REPORTS_DIR="./seismolog"
 if [ ! -d "$SM_REPORTS_DIR" ]; then #Check if the directory does NOT exist
@@ -16,9 +9,7 @@ SeismoSysLogExcerpt="${SM_REPORTS_DIR}/seismoErrorsCatExtract_${dtstamp}.log"
 SeismoHomeLogExcerpt="${SM_REPORTS_DIR}/seismoErrorsHomeExtract_${dtstamp}.log"
 
 is_web_log=1
-#choice="CONF"
-#choice="JIRA"
-choice="DBG"
+choice="CONF"
 if [[ "$choice" == "JIRA" ]]; then
 	APP_INST="/opt/atlassian/jira/install/logs/"
 	APP_HOME="/opt/atlassian/jira/home/log/"
@@ -55,7 +46,7 @@ fi
 #catalinaLogName="${CATALINA_LOG##*/}"
 #appLogName="${APP_MAIN_LOG##*/}"
 
-RangeHeadDate="2026-01-16"; RangeHeadTime="00:01"
+RangeHeadDate="2026-05-16"; RangeHeadTime="00:01"
 RangeTailDate="2026-05-16"; RangeTailTime="23:59"
 XcrptHeadDateTime="2026-03-08 16:33"
 XcrptTailDateTime="2026-03-08 16:35"
@@ -92,8 +83,6 @@ LeadingDateRegexDash="^[0-9]{2}-[A-Z][a-z]{2}-[0-9]{4}" #DD-Mmm-YYYY HH:mm:ss.ss
 LeadingDateRegexSlash="^\[[0-9]{2}/[A-Z][a-z]{2}/[0-9]{4}" #[DD/Mon/YYYY:HH:mm:ss --Apache/Nginx web server logs 
 
 convert_java_date_to_iso() {
-	#--From: 12-May-2026 09:24:06.999 to 2026-05-12
-	#--From: [12/May/2026:09:24:06 -0400] to 2026-05-12
 	formatted_date=$(date -d "$1" +%F 2>/dev/null) || formatted_date="1970-01-01"
 	echo "$formatted_date"
 }
@@ -245,17 +234,3 @@ if [[ "${#LogNamesArr[@]}" -gt 0 ]]; then
 else
 	echo "~No access to HOME logs at: ${APP_HOME}" >> ${SeismoRCAReportLog}
 fi
-}
-#EOF
-#======
-
-
-exit 0
-#-HOME_LOG_NARROW_EXCERPT
-echo "~Extracting Excerpt from the: ${XcrptFromTheLog}..." #Debug/Verbose
-echo -e "~HOME logs NARROW_EXCERPT in range from ${XcrptHeadDateTime} to ${XcrptTailDateTime}:\n${XcrptFromTheLog// /\\n}" > ${SeismoHomeLogExcerpt}
-echo "" >> ${SeismoHomeLogExcerpt}
-grep -Eh ${LeadingIsoDateRegex} ${XcrptFromTheLog} | date_range_excerpt | sed 'G' >> "${SeismoHomeLogExcerpt}"
-echo "~SeismoGraph: Logs scan complete."
-echo "~SeismoGraph: eof" >> ${SeismoRCAReportLog}
-
