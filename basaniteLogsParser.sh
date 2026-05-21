@@ -62,7 +62,6 @@ RangeTailDate="2026-05-21"; RangeTailTime="23:59"
 XcrptHeadDateTime="2026-03-08 16:33"
 XcrptTailDateTime="2026-03-08 16:35"
 XcrptFromTheLog="${APP_HOME}atlassian-jira.log ${APP_HOME}atlassian-jira.log.1"
-#tailLength=2000 #Allow to read only last ${tailLength} lines of the huge log 
 
 RangeHeadEpoch=$(date -d "${RangeHeadDate} ${RangeHeadTime}" +%s)
 RangeTailEpoch=$(date -d "${RangeTailDate} ${RangeTailTime}" +%s)
@@ -72,17 +71,17 @@ keywordsMap["Exceptions"]="[A-Za-z0-9\.]+Exception"
 keywordsMap["SlowRESTRequests"]="Request.*took|REQUEST"
 keywordsMap["Cluster-health"]="Hazelcast|onClusterPanicEvent|Cluster.*lost|node.*not[[:space:]]responding|heartbeat|split[[:space:]]brain"
 keywordsMap["JvmOutOfMemory"]="OutOfMemory|OOM|deadlock|timeout|memory[[:space:]]leak" 
-keywordsMap["DatabaseFailures"]="connection.*fail|database.*down|PSQLException|SQLTransientConnectionException|SQLExceptionHelper|executeQuery[[:space:]]Error"
+keywordsMap["DatabaseFailures"]="connection.*fail|database.*down|PSQLException|SQLTransientConnectionException|SqlExceptionHelper|executeQuery[[:space:]]Error"
 keywordsMap["PluginFailures"]="Plugin.*failed|Unable[[:space:]]to[[:space:]]start[[:space:]]plugin|OSGi|Spring[[:space:]]context[[:space:]]failed"
 keywordsMap["ThreadPoolStarvation"]="StuckThreadDetected|Thread.*blocked|StuckThread|thread[[:space:]]starvation|BLOCKED"
 keywordsMap["ThreadPoolExecutor"]="max[[:space:]]threads|busy[[:space:]]threads|stuck[[:space:]]thread|may[[:space:]]be[[:space:]]stuck"
 keywordsMap["SlowJQL"]=""
-keywordsMap["Mix"]="has[[:space:]]failed|Failed[[:space:]]to[[:space:]]delete|Oh[[:space:]]oh" #WARN: Failed to delete a remote link
+keywordsMap["Mix"]="has[[:space:]]failed|Failed[[:space:]]to[[:space:]]delete|Uh[[:space:]]oh" #WARN: Failed to delete a remote link
 keywordsMap["Catalina400"]="[[:space:]]HTTP/1.1[[:space:]]4" #[HTTP/1.1 403]
 keywordsMap["Catalina300"]="[[:space:]]HTTP/1.1[[:space:]]3|[[:space:]]HTTP/1.1[[:space:]]5" #[HTTP/1.1 403]
 
 keywordsMap["CSSErrorListener"]="sskit.antlr4.CSSErrorListener"
-
+FilterHomeRest="${keywordsMap["CSSErrorListener"]}"
 
 FilterHomeClogging="${keywordsMap["Atlassian-errors"]}"
 FilterHomeClogging+="|${keywordsMap["Exceptions"]}"
@@ -91,8 +90,9 @@ FilterHomeClogging+="|${keywordsMap["JvmOutOfMemory"]}"
 FilterHomeClogging+="|${keywordsMap["PluginFailures"]}"
 FilterHomeClogging+="|${keywordsMap["ThreadPoolExecutor"]}"
 FilterHomeClogging+="|${keywordsMap["SlowRESTRequests"]}"
-FilterHomeClogging="${keywordsMap["DatabaseFailures"]}"
+FilterHomeClogging+="|${keywordsMap["DatabaseFailures"]}"
 FilterHomeClogging+="|${keywordsMap["ThreadPoolStarvation"]}"
+FilterHomeClogging+="|${keywordsMap["Mix"]}"
 
 FilterCatalina400="${keywordsMap["Catalina400"]}"
 FilterCatalina300="${keywordsMap["Catalina300"]}"
