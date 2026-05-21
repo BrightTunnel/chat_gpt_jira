@@ -97,8 +97,8 @@ LeadingDateRegexDash="^[0-9]{2}-[A-Z][a-z]{2}-[0-9]{4}" #DD-Mmm-YYYY HH:mm:ss.ss
 LeadingDateRegexSlash="^\[[0-9]{2}/[A-Z][a-z]{2}/[0-9]{4}" #[DD/Mon/YYYY:HH:mm:ss --Apache/Nginx web server logs 
 
 convert_java_date_to_iso() {
-	#--From: 12-May-2026 09:24:06.999 to 2026-05-12
-	#--From: [12/May/2026:09:24:06 -0400] to 2026-05-12
+	#--DateTime Stamp: 12-May-2026 09:24:06.999 to 2026-05-12
+	#--DateTime Stamp: [12/May/2026:09:24:06 -0400] to 2026-05-12
 	formatted_date=$(date -d "$1" +%F 2>/dev/null) || formatted_date="1970-01-01"
 	echo "$formatted_date"
 }
@@ -166,25 +166,27 @@ if [[ -n "$LogNames" ]]; then
 	echo " * ${FilterCatalina400}" | sed 's/\[\[:space:\]\]/ /g' >> ${SeismoErrorsDensity}
 	echo " . ${FilterCatalina300}" | sed 's/\[\[:space:\]\]/ /g' >> ${SeismoErrorsDensity}
 	echo -e "~Events Density (events per min):\n" >> ${SeismoErrorsDensity}
-	if (( is_web_log == 1 )); then
-		#--From: [12/Feb/2026:08:59:58 -0400], ts_part1: [12/Feb/2026:08:59:58, ts_part2: -0400]
-		grep -Eh "${LeadingDateRegexSlash}" ${LogNames} | grep -E ${FilterCatalina400} | while read -r ts_part1 ts_part2 rest; do
-			iso_date=$(convert_apache_nginx_date_to_iso "${ts_part1} ${ts_part2}")
-			log_time="${ts_part1#*:}" #Extract time 08:59:58
-			echo "${iso_date} ${log_time} ${rest}"
-			done | date_range_full | sort | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdSys" "*" >> ${SeismoErrorsDensity}
-			
-#		INITIAL_LOGS=$(grep -Eh "${LeadingDateRegexSlash}" ${LogNames} | date_range_full) #Capture the base filtered logs in RAM
-#		#--Line-by-line horizontal merge using subshell process substitution, #idex 0: YYYY-MM-DD_HH:mm (e.g: 2026-05-16_14:06)
+	if (( is_web_log == 1 )); then #--DateTime Stamp: [12/Feb/2026:08:59:58 -0400], ts_part1: [12/Feb/2026:08:59:58, ts_part2: -0400]
+
+		grep -Eh "${LeadingDateRegexSlash}" ${LogNames} |
+			grep -E ${FilterCatalina400} |
+			while read -r ts_part1 ts_part2 rest; do
+				iso_date=$(convert_apache_nginx_date_to_iso "${ts_part1} ${ts_part2}")
+				log_time="${ts_part1#*:}" #Extract time 08:59:58
+				echo "${iso_date} ${log_time} ${rest}"
+			done |
+		date_range_full | sort | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdSys" "*" >> ${SeismoErrorsDensity}
+
+#--This is possible replacement for above.TODO: Separate 300/400/500
+#		INITIAL_LOGS=$(grep -Eh "${LeadingDateRegexSlash}" ${LogNames})
 #		join -a1 -a2 -e "" -o '0,1.2,2.2' \
 #			<(echo "${INITIAL_LOGS}" | grep -E "${FilterHomeRest}" | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdHome" ".") \
 #			<(echo "${INITIAL_LOGS}" | grep -E "${FilterHomeClogging}" | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdHome" "*") |
-#		sort >> "${SeismoErrorsDensity}"
+#		date_range_full | sort >> "${SeismoErrorsDensity}"
 
-	elif (( is_web_log == 2 )); then
-		#--From: 12-May-2026 09:24:06.999
+	elif (( is_web_log == 2 )); then #--DateTime Stamp: 12-May-2026 09:24:06.999
 		grep -Eh "${LeadingDateRegexDash}" ${LogNames} | grep -E ${FilterCatalina400} | while read -r date_str time_str rest; do
-			iso_date=$(convert_java_date_to_iso "${date_str}") #--From: 12-May-2026 09:24:06.999 to 2026-05-12
+			iso_date=$(convert_java_date_to_iso "${date_str}") 
 			echo "${iso_date} ${time_str} ${rest}"
 			done | date_range_full | sort | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdSys" "*" >> ${SeismoErrorsDensity}
 	fi
@@ -197,6 +199,7 @@ fi
 
 elapsed=$(( ($(date +%s%N) - start_time) / 1000000000 )); min=$(( elapsed / 60 )); sec=$(( elapsed % 60 ))
 echo "~Sys Execution time: ${min} minutes ${sec} seconds"
+
 
 
 #--HOME_LOG
@@ -247,7 +250,7 @@ if [[ "${#LogNamesArr[@]}" -gt 0 ]]; then
 	echo -e "~Events Density (events per min):\n" >> ${SeismoErrorsDensity}
 
 	INITIAL_LOGS=$(grep -Eh "${LeadingIsoDateRegex}" ${LogNames} | date_range_full) #Capture the base filtered logs in RAM
-	#--Line-by-line horizontal merge using subshell process substitution, #idex 0: YYYY-MM-DD_HH:mm (e.g: 2026-05-16_14:06)
+	#--Line-by-line horizontal merge using subshell process substitution, #index 0: YYYY-MM-DD_HH:mm (e.g: 2026-05-16_14:06)
 	join -a1 -a2 -e "" -o '0,1.2,2.2' \
 		<(echo "${INITIAL_LOGS}" | grep -E "${FilterHomeRest}" | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdHome" ".") \
 		<(echo "${INITIAL_LOGS}" | grep -E "${FilterHomeClogging}" | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdHome" "*") |
