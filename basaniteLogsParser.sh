@@ -72,20 +72,25 @@ keywordsMap["Exceptions"]="[A-Za-z0-9\.]+Exception"
 keywordsMap["SlowRESTRequests"]="Request.*took|REQUEST"
 keywordsMap["Cluster-health"]="Hazelcast|onClusterPanicEvent|Cluster.*lost|node.*not[[:space:]]responding|heartbeat|split[[:space:]]brain"
 keywordsMap["JvmOutOfMemory"]="OutOfMemory|OOM|deadlock|timeout|memory[[:space:]]leak" 
-keywordsMap["DatabaseFailures"]="connection.*fail|database.*down|PSQLException|SQLTransientConnectionException"
+keywordsMap["DatabaseFailures"]="connection.*fail|database.*down|PSQLException|SQLTransientConnectionException|SQLExceptionHelper|executeQuery[[:space:]]Error"
 keywordsMap["PluginFailures"]="Plugin.*failed|Unable[[:space:]]to[[:space:]]start[[:space:]]plugin|OSGi|Spring[[:space:]]context[[:space:]]failed"
 keywordsMap["ThreadPoolStarvation"]="StuckThreadDetected|Thread.*blocked|StuckThread|thread[[:space:]]starvation|BLOCKED"
 keywordsMap["ThreadPoolExecutor"]="max[[:space:]]threads|busy[[:space:]]threads|stuck[[:space:]]thread|may[[:space:]]be[[:space:]]stuck"
-keywordsMap["Mix"]="has[[:space:]]failed|Failed[[:space:]]to[[:space:]]delete" #WARN: Failed to delete a remote link
+keywordsMap["SlowJQL"]=""
+keywordsMap["Mix"]="has[[:space:]]failed|Failed[[:space:]]to[[:space:]]delete|Oh[[:space:]]oh" #WARN: Failed to delete a remote link
 keywordsMap["Catalina400"]="[[:space:]]HTTP/1.1[[:space:]]4" #[HTTP/1.1 403]
 keywordsMap["Catalina300"]="[[:space:]]HTTP/1.1[[:space:]]3|[[:space:]]HTTP/1.1[[:space:]]5" #[HTTP/1.1 403]
-FilterHomeRest="${keywordsMap["Atlassian-errors"]}"
-FilterHomeRest+="|${keywordsMap["Exceptions"]}"
-FilterHomeRest+="|${keywordsMap["Cluster-health"]}"
-FilterHomeRest+="|${keywordsMap["JvmOutOfMemory"]}"
-FilterHomeRest+="|${keywordsMap["PluginFailures"]}"
-FilterHomeRest+="|${keywordsMap["ThreadPoolExecutor"]}"
-FilterHomeRest+="|${keywordsMap["SlowRESTRequests"]}"
+
+keywordsMap["CSSErrorListener"]="sskit.antlr4.CSSErrorListener"
+
+
+FilterHomeClogging="${keywordsMap["Atlassian-errors"]}"
+FilterHomeClogging+="|${keywordsMap["Exceptions"]}"
+FilterHomeClogging+="|${keywordsMap["Cluster-health"]}"
+FilterHomeClogging+="|${keywordsMap["JvmOutOfMemory"]}"
+FilterHomeClogging+="|${keywordsMap["PluginFailures"]}"
+FilterHomeClogging+="|${keywordsMap["ThreadPoolExecutor"]}"
+FilterHomeClogging+="|${keywordsMap["SlowRESTRequests"]}"
 FilterHomeClogging="${keywordsMap["DatabaseFailures"]}"
 FilterHomeClogging+="|${keywordsMap["ThreadPoolStarvation"]}"
 
