@@ -11,7 +11,7 @@ SM_REPORTS_DIR="./seismolog"
 if [ ! -d "$SM_REPORTS_DIR" ]; then #Check if the directory does NOT exist
 	mkdir -p "$SM_REPORTS_DIR"
 fi
-dtstamp=$(date +"%Y%m%d-%H%M")
+dtstamp=$(date +"%Y%m%d_%H%M")
 SeismoErrorsDensity="${SM_REPORTS_DIR}/seismoErrorsDensity_${dtstamp}.log"
 SeismoErrorsSysExtract="${SM_REPORTS_DIR}/seismoErrorsSysExtract_${dtstamp}.log"
 SeismoErrorsHomeExtract="${SM_REPORTS_DIR}/seismoErrorsHomeExtract_${dtstamp}.log"
@@ -29,7 +29,7 @@ if [[ "$choice" == "JIRA" ]]; then
 	APP_MAIN_LOG="${APP_HOME}atlassian-jira-perf.log"
 	APP_MAIN_LOG="${APP_HOME}atlassian-jira.log"
 	thresholdSys=1
-	thresholdHome=20
+	thresholdHome=10
 	compressRate=10
 elif [[ "$choice" == "CONF" ]]; then
 	APP_INST="/opt/atlassian/confluence/install/logs/"
@@ -38,7 +38,7 @@ elif [[ "$choice" == "CONF" ]]; then
 	CATALINA_LOG="${APP_INST}conf_access_log." #conf_access_log.2026-02-12.log
 	APP_MAIN_LOG="${APP_HOME}atlassian-confluence.log"
 	thresholdSys=1
-	thresholdHome=20
+	thresholdHome=10
 	compressRate=10
 elif [[ "$choice" == "Bitbucket" ]]; then
 	exit
@@ -57,8 +57,8 @@ fi
 #catalinaLogName="${CATALINA_LOG##*/}"
 #appLogName="${APP_MAIN_LOG##*/}"
 
-RangeHeadDate="2026-01-16"; RangeHeadTime="00:01"
-RangeTailDate="2026-05-16"; RangeTailTime="23:59"
+RangeHeadDate="2026-01-20"; RangeHeadTime="00:01"
+RangeTailDate="2026-05-21"; RangeTailTime="23:59"
 XcrptHeadDateTime="2026-03-08 16:33"
 XcrptTailDateTime="2026-03-08 16:35"
 XcrptFromTheLog="${APP_HOME}atlassian-jira.log ${APP_HOME}atlassian-jira.log.1"
@@ -77,7 +77,8 @@ keywordsMap["PluginFailures"]="Plugin.*failed|Unable[[:space:]]to[[:space:]]star
 keywordsMap["ThreadPoolStarvation"]="StuckThreadDetected|Thread.*blocked|StuckThread|thread[[:space:]]starvation|BLOCKED"
 keywordsMap["ThreadPoolExecutor"]="max[[:space:]]threads|busy[[:space:]]threads|stuck[[:space:]]thread|may[[:space:]]be[[:space:]]stuck"
 keywordsMap["Mix"]="has[[:space:]]failed|Failed[[:space:]]to[[:space:]]delete" #WARN: Failed to delete a remote link
-keywordsMap["Catalina"]="[[:space:]]HTTP/1.1[[:space:]]3|[[:space:]]HTTP/1.1[[:space:]]4|[[:space:]]HTTP/1.1[[:space:]]5" #[HTTP/1.1 403]
+keywordsMap["Catalina400"]="[[:space:]]HTTP/1.1[[:space:]]4" #[HTTP/1.1 403]
+keywordsMap["Catalina300"]="[[:space:]]HTTP/1.1[[:space:]]3|[[:space:]]HTTP/1.1[[:space:]]5" #[HTTP/1.1 403]
 FilterHomeRest="${keywordsMap["Atlassian-errors"]}"
 FilterHomeRest+="|${keywordsMap["Exceptions"]}"
 FilterHomeRest+="|${keywordsMap["Cluster-health"]}"
@@ -87,7 +88,9 @@ FilterHomeRest+="|${keywordsMap["ThreadPoolExecutor"]}"
 FilterHomeRest+="|${keywordsMap["SlowRESTRequests"]}"
 FilterHomeClogging="${keywordsMap["DatabaseFailures"]}"
 FilterHomeClogging+="|${keywordsMap["ThreadPoolStarvation"]}"
-FilterCatalina="${keywordsMap["Catalina"]}"
+
+FilterCatalina400="${keywordsMap["Catalina400"]}"
+FilterCatalina300="${keywordsMap["Catalina300"]}"
 
 LeadingIsoDateRegex="^[0-9]{4}-[0-9]{2}-[0-9]{2}" #YYYY-MM-DD HH:mm:ss
 LeadingDateRegexDash="^[0-9]{2}-[A-Z][a-z]{2}-[0-9]{4}" #DD-Mmm-YYYY HH:mm:ss.sss 12-May-2026 09:24:06.999 --Database timestamps, Java/Oracle logs
@@ -159,27 +162,35 @@ done
 echo "~Parsing SYS logs..." #Debug/Verbose
 if [[ -n "$LogNames" ]]; then
 	echo -e "~INSTALL logs in range from ${RangeHeadDate} ${RangeHeadTime} to ${RangeTailDate} ${RangeTailTime}:${LogsParsedInfo}" > ${SeismoErrorsDensity}
-	echo "~Events: ${FilterCatalina}" >> "${SeismoErrorsDensity}"
-	echo -e "~Events Density (events per min):\n" >> "${SeismoErrorsDensity}"
+	echo "~Chart Legend: [(*) HTTP Errors 400, (.) HTTP Errors 300, 500], Filters detailes:" >> ${SeismoErrorsDensity}
+	echo " * ${FilterCatalina400}" | sed 's/\[\[:space:\]\]/ /g' >> ${SeismoErrorsDensity}
+	echo " . ${FilterCatalina300}" | sed 's/\[\[:space:\]\]/ /g' >> ${SeismoErrorsDensity}
+	echo -e "~Events Density (events per min):\n" >> ${SeismoErrorsDensity}
 	if (( is_web_log == 1 )); then
-		#--From: [12/Feb/2026:08:59:58 -0400]
-		tail ${LogNames} | grep -Eh "${LeadingDateRegexSlash}" | grep -E ${FilterCatalina} | while read -r ts_part1 ts_part2 rest; do
-			# ts_part1: [12/Feb/2026:08:59:58
-			# ts_part2: -0400]
+		#--From: [12/Feb/2026:08:59:58 -0400], ts_part1: [12/Feb/2026:08:59:58, ts_part2: -0400]
+		grep -Eh "${LeadingDateRegexSlash}" ${LogNames} | grep -E ${FilterCatalina400} | while read -r ts_part1 ts_part2 rest; do
 			iso_date=$(convert_apache_nginx_date_to_iso "${ts_part1} ${ts_part2}")
 			log_time="${ts_part1#*:}" #Extract time 08:59:58
 			echo "${iso_date} ${log_time} ${rest}"
-			done | date_range_full | sort | cut -c 1-16 | uniq -c | print_seismographFullLine 1 "$thresholdSys" "*" >> ${SeismoErrorsDensity}
+			done | date_range_full | sort | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdSys" "*" >> ${SeismoErrorsDensity}
+			
+#		INITIAL_LOGS=$(grep -Eh "${LeadingDateRegexSlash}" ${LogNames} | date_range_full) #Capture the base filtered logs in RAM
+#		#--Line-by-line horizontal merge using subshell process substitution, #idex 0: YYYY-MM-DD_HH:mm (e.g: 2026-05-16_14:06)
+#		join -a1 -a2 -e "" -o '0,1.2,2.2' \
+#			<(echo "${INITIAL_LOGS}" | grep -E "${FilterHomeRest}" | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdHome" ".") \
+#			<(echo "${INITIAL_LOGS}" | grep -E "${FilterHomeClogging}" | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdHome" "*") |
+#		sort >> "${SeismoErrorsDensity}"
+
 	elif (( is_web_log == 2 )); then
 		#--From: 12-May-2026 09:24:06.999
-		grep -Eh "${LeadingDateRegexDash}" ${LogNames} | grep -E ${FilterCatalina} | while read -r date_str time_str rest; do
+		grep -Eh "${LeadingDateRegexDash}" ${LogNames} | grep -E ${FilterCatalina400} | while read -r date_str time_str rest; do
 			iso_date=$(convert_java_date_to_iso "${date_str}") #--From: 12-May-2026 09:24:06.999 to 2026-05-12
 			echo "${iso_date} ${time_str} ${rest}"
-			done | date_range_full | sort | cut -c 1-16 | uniq -c | print_seismographFullLine 1 "$thresholdSys" "*" >> ${SeismoErrorsDensity}
+			done | date_range_full | sort | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdSys" "*" >> ${SeismoErrorsDensity}
 	fi
 	#--Save All found Error lines
 	echo -e "\n~SYS logs ERRORS EXCERPT in range from: ${RangeHeadDate} ${RangeHeadTime} to: ${RangeTailDate} ${RangeTailTime}:${LogNames// /\\n}\n" >> ${SeismoErrorsSysExtract}
-	grep -Eh ${LeadingDateRegexSlash} ${LogNames} | grep -E ${FilterCatalina} >> ${SeismoErrorsSysExtract}
+	grep -Eh ${LeadingDateRegexSlash} ${LogNames} | grep -E ${FilterCatalina400} >> ${SeismoErrorsSysExtract}
 else
 	echo "~No access to INSTALL logs at: ${APP_INST}" >> ${SeismoErrorsDensity}
 fi
@@ -231,8 +242,8 @@ echo "~Parsing HOME logs..." #Debug/Verbose
 if [[ "${#LogNamesArr[@]}" -gt 0 ]]; then
 	echo -e "\n~HOME logs in range from: ${RangeHeadDate} ${RangeHeadTime} to: ${RangeTailDate} ${RangeTailTime}:${lstOfHomeLogFiles}" >> ${SeismoErrorsDensity}
 	echo "~Chart Legend: [(*) Clogging, (.) Other Errors], Filters detailes:" >> ${SeismoErrorsDensity}
-	echo " * ${FilterHomeClogging}" >> ${SeismoErrorsDensity}
-	echo " . ${FilterHomeRest}" >> ${SeismoErrorsDensity}
+	echo " * ${FilterHomeClogging}" | sed 's/\[\[:space:\]\]/ /g' >> ${SeismoErrorsDensity}
+	echo " . ${FilterHomeRest}" | sed 's/\[\[:space:\]\]/ /g' >> ${SeismoErrorsDensity}
 	echo -e "~Events Density (events per min):\n" >> ${SeismoErrorsDensity}
 
 	INITIAL_LOGS=$(grep -Eh "${LeadingIsoDateRegex}" ${LogNames} | date_range_full) #Capture the base filtered logs in RAM
