@@ -82,16 +82,17 @@ keywordsMap["Catalina300"]="[[:space:]]HTTP/1.1[[:space:]]3|[[:space:]]HTTP/1.1[
 
 keywordsMap["CSSErrorListener"]="sskit.antlr4.CSSErrorListener"
 FilterHomeRest="${keywordsMap["CSSErrorListener"]}"
+FilterHomeRest="${keywordsMap["DatabaseFailures"]}" #--TEST_CASE
 
 FilterHomeClogging="${keywordsMap["Atlassian-errors"]}"
 FilterHomeClogging+="|${keywordsMap["Exceptions"]}"
 FilterHomeClogging+="|${keywordsMap["Cluster-health"]}"
 FilterHomeClogging+="|${keywordsMap["JvmOutOfMemory"]}"
 FilterHomeClogging+="|${keywordsMap["PluginFailures"]}"
+FilterHomeClogging+="|${keywordsMap["ThreadPoolStarvation"]}"
 FilterHomeClogging+="|${keywordsMap["ThreadPoolExecutor"]}"
 FilterHomeClogging+="|${keywordsMap["SlowRESTRequests"]}"
 FilterHomeClogging+="|${keywordsMap["DatabaseFailures"]}"
-FilterHomeClogging+="|${keywordsMap["ThreadPoolStarvation"]}"
 FilterHomeClogging+="|${keywordsMap["Mix"]}"
 
 FilterCatalina400="${keywordsMap["Catalina400"]}"
@@ -259,7 +260,7 @@ if [[ "${#LogNamesArr[@]}" -gt 0 ]]; then
 	join -a1 -a2 -e "" -o '0,1.2,2.2' \
 		<(echo "${INITIAL_LOGS}" | grep -E "${FilterHomeRest}" | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdHome" ".") \
 		<(echo "${INITIAL_LOGS}" | grep -E "${FilterHomeClogging}" | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdHome" "*") |
-	sort >> "${SeismoErrorsDensity}"
+	sort >> ${SeismoErrorsDensity}
 
 	#--Save all error lines
 	echo -e "\n~HOME logs ERRORS EXCERPT in range from ${RangeHeadDate} ${RangeHeadTime} to ${RangeTailDate} ${RangeTailTime}:\n${lstOfHomeLogFiles}\n" >> ${SeismoErrorsHomeExtract}
