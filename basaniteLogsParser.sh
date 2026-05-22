@@ -1,12 +1,3 @@
-
-We cannot verify the number of calls to specific endpoints or the responses for those calls. The logs are retained for a maximum of approximately 24 hours. We can verify the number of calls on the same day, but we need to know the specific day you are targeting.
-It would also be useful to understand the logic behind your log extraction process, for example:
-the timing,
-the parsing approach you are using,
-and the names of the logs from which you are pulling the data.
-
-
-
 start_time=$(date +%s%N) #--start time in nanoseconds
 SM_REPORTS_DIR="./seismolog"
 if [ ! -d "$SM_REPORTS_DIR" ]; then #Check if the directory does NOT exist
@@ -56,8 +47,8 @@ fi
 #catalinaLogName="${CATALINA_LOG##*/}"
 #appLogName="${APP_MAIN_LOG##*/}"
 
-RangeHeadDate="2026-01-20"; RangeHeadTime="00:01"
-RangeTailDate="2026-05-21"; RangeTailTime="23:59"
+RangeHeadDate="2026-05-22"; RangeHeadTime="00:01"
+RangeTailDate="2026-05-22"; RangeTailTime="23:59"
 XcrptHeadDateTime="2026-03-08 16:33"
 XcrptTailDateTime="2026-03-08 16:35"
 XcrptFromTheLog="${APP_HOME}atlassian-jira.log ${APP_HOME}atlassian-jira.log.1"
@@ -164,16 +155,59 @@ while [ "${RollingDay}" != "$EndComparison" ]; do
 	RollingDay=$(date -d "${RollingDay} + 1 day" +%Y-%m-%d)
 done
 
+jraKwSearch="search"
+jraKwcCreateIssue="createIssue"
+jraKwRapidBoard="secure\/RapidBoard.jspa"
+jraKwRestApiSearch="\/rest\/api\/2\/search"
+jraKwRestCreateIssue="\/rest\/api\/2\/issue"
+
+confKwCopy="\/pages\/copypage.action"
+confKwView="\/pages\/viewpage.action"
+confKwCreate="\/pages\/createpage.action"
+confKwHistory="\/pages\/viewpreviousversions.action"
+confKwList="\/pages\/listpages.action"
+confKwEdit="\/pages\/editpage.action"
+confKwAttchmts="\/pages\/viewpageattachments.action"
+confKwSearch="\/rest\/api\/search"
+
 echo "~Parsing SYS logs..." #Debug/Verbose
 if [[ -n "$LogNames" ]]; then
 	echo -e "~INSTALL logs in range from ${RangeHeadDate} ${RangeHeadTime} to ${RangeTailDate} ${RangeTailTime}:${LogsParsedInfo}" > ${SeismoErrorsDensity}
 	echo "~Chart Legend: [(*) HTTP Errors 400, (.) HTTP Errors 300, 500], Filters detailes:" >> ${SeismoErrorsDensity}
 	echo " * ${FilterCatalina400}" | sed 's/\[\[:space:\]\]/ /g' >> ${SeismoErrorsDensity}
 	echo " . ${FilterCatalina300}" | sed 's/\[\[:space:\]\]/ /g' >> ${SeismoErrorsDensity}
-	echo -e "~Events Density (events per min):\n" >> ${SeismoErrorsDensity}
+	echo -e "~Events Counter and Density (events per min):\n" >> ${SeismoErrorsDensity}
 	if (( is_web_log == 1 )); then #--DateTime Stamp: [12/Feb/2026:08:59:58 -0400], ts_part1: [12/Feb/2026:08:59:58, ts_part2: -0400]
-
-		grep -Eh "${LeadingDateRegexSlash}" ${LogNames} |
+		grep -Eh "${LeadingDateRegexSlash}" ${LogNames} | awk -v slch="\\" -v destFile=${SeismoErrorsDensity} \
+			-v p1="$confKwCopy" \
+			-v p2="$confKwView" \
+			-v p3="$confKwCreate" \
+			-v p4="$confKwHistory" \
+			-v p5="$confKwList" \
+			-v p6="$confKwEdit" \
+			-v p7="$confKwAttchmts" \
+			-v p8="$confKwSearch" ' {
+			    if ($0 ~ p1) c1++
+			    if ($0 ~ p2) c2++
+			    if ($0 ~ p3) c3++
+			    if ($0 ~ p4) c4++
+			    if ($0 ~ p5) c5++
+			    if ($0 ~ p6) c6++
+			    if ($0 ~ p7) c7++
+			    if ($0 ~ p8) c8++
+			    print
+			}
+			END { 
+				gsub(slch,"",p1); print c1+0"\t", p1 >> destFile
+			    gsub(slch,"",p2); print c2+0"\t", p2 >> destFile
+			    gsub(slch,"",p3); print c3+0"\t", p3 >> destFile
+			    gsub(slch,"",p4); print c4+0"\t", p4 >> destFile
+			    gsub(slch,"",p5); print c5+0"\t", p5 >> destFile
+				gsub(slch,"",p6); print c6+0"\t", p6 >> destFile
+				gsub(slch,"",p7); print c7+0"\t", p7 >> destFile
+				gsub(slch,"",p8); print c8+0"\t", p8 >> destFile
+				print "" >> destFile
+			}' |
 			grep -E ${FilterCatalina400} |
 			while read -r ts_part1 ts_part2 rest; do
 				iso_date=$(convert_apache_nginx_date_to_iso "${ts_part1} ${ts_part2}")
