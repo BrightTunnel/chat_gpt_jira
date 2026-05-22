@@ -1,10 +1,11 @@
-#!/bin/bash
-#--Atlassian Application Failure Root Cause Analyzer. Scans local application node logs for fatal error patterns.
-#--SeismoLog by Valeri Tikhonov, TD, May 2026.
 
-#bash << 'EOF'
-set enable-bracketed-paste on
-{
+We cannot verify the number of calls to specific endpoints or the responses for those calls. The logs are retained for a maximum of approximately 24 hours. We can verify the number of calls on the same day, but we need to know the specific day you are targeting.
+It would also be useful to understand the logic behind your log extraction process, for example:
+the timing,
+the parsing approach you are using,
+and the names of the logs from which you are pulling the data.
+
+
 
 start_time=$(date +%s%N) #--start time in nanoseconds
 SM_REPORTS_DIR="./seismolog"
@@ -18,9 +19,7 @@ SeismoErrorsHomeExtract="${SM_REPORTS_DIR}/seismoErrorsHomeExtract_${dtstamp}.lo
 SeismoFullNarrowExcerpt="${SM_REPORTS_DIR}/seismoFullNarrowExcerpt_${dtstamp}.log"
 
 is_web_log=1
-#choice="CONF"
-#choice="JIRA"
-choice="DBG"
+choice="CONF"
 if [[ "$choice" == "JIRA" ]]; then
 	APP_INST="/opt/atlassian/jira/install/logs/"
 	APP_HOME="/opt/atlassian/jira/home/log/"
@@ -80,9 +79,9 @@ keywordsMap["Mix"]="has[[:space:]]failed|Failed[[:space:]]to[[:space:]]delete|Uh
 keywordsMap["Catalina400"]="[[:space:]]HTTP/1.1[[:space:]]4" #[HTTP/1.1 403]
 keywordsMap["Catalina300"]="[[:space:]]HTTP/1.1[[:space:]]3|[[:space:]]HTTP/1.1[[:space:]]5" #[HTTP/1.1 403]
 
-keywordsMap["CSSErrorListener"]="sskit.antlr4.CSSErrorListener"
+keywordsMap["CSSErrorListener"]="csskit.antlr4.CSSErrorListener"
 FilterHomeRest="${keywordsMap["CSSErrorListener"]}"
-FilterHomeRest="${keywordsMap["DatabaseFailures"]}" #--TEST_CASE
+#FilterHomeRest="${keywordsMap["DatabaseFailures"]}" #--TEST_CASE
 
 FilterHomeClogging="${keywordsMap["Atlassian-errors"]}"
 FilterHomeClogging+="|${keywordsMap["Exceptions"]}"
@@ -272,21 +271,3 @@ fi
 elapsed=$(( ($(date +%s%N) - start_time) / 1000000000 )); min=$(( elapsed / 60 )); sec=$(( elapsed % 60 ))
 echo "~Home Execution time: ${min} minutes ${sec} seconds"
 
-
-}
-#EOF
-#======
-
-
-#exit 0
-#-HOME_LOG_FULL_NARROW_EXCERPT
-echo "~Save HOME logs NARROW_EXCERPT in the range: ${XcrptHeadDateTime}..${XcrptTailDateTime}" #Debug/Verbose
-echo -e "~HOME logs FULL_NARROW_EXCERPT in range from ${XcrptHeadDateTime} to ${XcrptTailDateTime}:\n${XcrptFromTheLog// /\\n}" > ${SeismoFullNarrowExcerpt}
-echo "" >> ${SeismoFullNarrowExcerpt}
-grep -Eh ${LeadingIsoDateRegex} ${XcrptFromTheLog} | date_range_excerpt >> "${SeismoFullNarrowExcerpt}"
-#grep -Eh ${LeadingIsoDateRegex} ${XcrptFromTheLog} | date_range_excerpt | sed 'G' >> "${SeismoFullNarrowExcerpt}" #With Extra \n
-
-
-#--Script execution time
-elapsed=$(( ($(date +%s%N) - start_time) / 1000000000 )); min=$(( elapsed / 60 )); sec=$(( elapsed % 60 ))
-echo "~Overall Execution time: ${min} minutes ${sec} seconds"
