@@ -187,22 +187,22 @@ if [[ -n "$LogNames" ]]; then
 			-v p6="$confKwEdit" \
 			-v p7="$confKwAttchmts" \
 			-v p8="$confKwSearch" ' {
-			    if ($0 ~ p1) c1++
-			    if ($0 ~ p2) c2++
-			    if ($0 ~ p3) c3++
-			    if ($0 ~ p4) c4++
-			    if ($0 ~ p5) c5++
-			    if ($0 ~ p6) c6++
-			    if ($0 ~ p7) c7++
-			    if ($0 ~ p8) c8++
-			    print
+				if ($0 ~ p1) c1++
+				if ($0 ~ p2) c2++
+				if ($0 ~ p3) c3++
+				if ($0 ~ p4) c4++
+				if ($0 ~ p5) c5++
+				if ($0 ~ p6) c6++
+				if ($0 ~ p7) c7++
+				if ($0 ~ p8) c8++
+				print
 			}
 			END { 
 				gsub(slch,"",p1); print c1+0"\t", p1 >> destFile
-			    gsub(slch,"",p2); print c2+0"\t", p2 >> destFile
-			    gsub(slch,"",p3); print c3+0"\t", p3 >> destFile
-			    gsub(slch,"",p4); print c4+0"\t", p4 >> destFile
-			    gsub(slch,"",p5); print c5+0"\t", p5 >> destFile
+				gsub(slch,"",p2); print c2+0"\t", p2 >> destFile
+				gsub(slch,"",p3); print c3+0"\t", p3 >> destFile
+				gsub(slch,"",p4); print c4+0"\t", p4 >> destFile
+				gsub(slch,"",p5); print c5+0"\t", p5 >> destFile
 				gsub(slch,"",p6); print c6+0"\t", p6 >> destFile
 				gsub(slch,"",p7); print c7+0"\t", p7 >> destFile
 				gsub(slch,"",p8); print c8+0"\t", p8 >> destFile
