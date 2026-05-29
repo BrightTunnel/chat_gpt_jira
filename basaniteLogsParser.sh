@@ -9,8 +9,16 @@ SeismoErrorsSysExtract="${SM_REPORTS_DIR}/seismoErrorsSysExtract_${dtstamp}.log"
 SeismoErrorsHomeExtract="${SM_REPORTS_DIR}/seismoErrorsHomeExtract_${dtstamp}.log"
 SeismoFullNarrowExcerpt="${SM_REPORTS_DIR}/seismoFullNarrowExcerpt_${dtstamp}.log"
 
-is_web_log=1
-choice="CONF"
+isDateIso=1
+#choice="JIRA"
+#choice="CONF"
+choice="JIRA_DBG"
+#choice="CONF_DBG"
+APP_INST="/media/user/Storage/@jira_logs_copy/jira_sys/logs/" #--Debug@Local
+APP_HOME="/media/user/Storage/@jira_logs_copy/jira_home/log/" #--Debug@Local
+thresholdSys=1
+thresholdHome=1
+compressRate=1
 if [[ "$choice" == "JIRA" ]]; then
 	APP_INST="/opt/atlassian/jira/install/logs/"
 	APP_HOME="/opt/atlassian/jira/home/log/"
@@ -18,7 +26,6 @@ if [[ "$choice" == "JIRA" ]]; then
 	CATALINA_LOG="${APP_INST}conf_access_log." #conf_access_log.2026-02-12.log
 	APP_MAIN_LOG="${APP_HOME}atlassian-jira-perf.log"
 	APP_MAIN_LOG="${APP_HOME}atlassian-jira.log"
-	thresholdSys=1
 	thresholdHome=10
 	compressRate=10
 elif [[ "$choice" == "CONF" ]]; then
@@ -27,28 +34,25 @@ elif [[ "$choice" == "CONF" ]]; then
 	CATALINA_LOG="${APP_INST}catalina." #catalina.2026-03-14.log
 	CATALINA_LOG="${APP_INST}conf_access_log." #conf_access_log.2026-02-12.log
 	APP_MAIN_LOG="${APP_HOME}atlassian-confluence.log"
-	thresholdSys=1
 	thresholdHome=10
 	compressRate=10
 elif [[ "$choice" == "Bitbucket" ]]; then
-	exit
-elif [[ "$choice" == "DBG" ]]; then
-	APP_INST="/media/user/Storage/@jira_logs_copy/jira_sys/logs/"
-	APP_HOME="/media/user/Storage/@jira_logs_copy/jira_home/log/"
+	exit 0
+elif [[ "$choice" == "JIRA_DBG" ]]; then
+	CATALINA_LOG="${APP_INST}access_log." # "access_log.2026-02-12"
+	APP_MAIN_LOG="${APP_HOME}atlassian-jira.log"
+elif [[ "$choice" == "CONF_DBG" ]]; then
 	CATALINA_LOG=${2:-/home/user/atlassian-jira-software/logs/catalina.out}
 	CATALINA_LOG="${APP_INST}catalina."
 	CATALINA_LOG="${APP_INST}conf_access_log." #conf_access_log.2026-02-12.log
 	APP_MAIN_LOG=${1:-/home/user/atlassian-jira-home/log/atlassian-jira.log}
 	APP_MAIN_LOG="${APP_HOME}atlassian-jira.log"
-	thresholdSys=1
-	thresholdHome=1
-	compressRate=1
 fi
 #catalinaLogName="${CATALINA_LOG##*/}"
 #appLogName="${APP_MAIN_LOG##*/}"
 
-RangeHeadDate="2026-05-15"; RangeHeadTime="00:01"
-RangeTailDate="2026-05-25"; RangeTailTime="23:59"
+RangeHeadDate="2026-05-27"; RangeHeadTime="00:01"
+RangeTailDate="2026-05-28"; RangeTailTime="23:59"
 XcrptHeadDateTime="2026-03-08 16:33"
 XcrptTailDateTime="2026-03-08 16:35"
 XcrptFromTheLog="${APP_HOME}atlassian-jira.log ${APP_HOME}atlassian-jira.log.1"
@@ -88,7 +92,9 @@ FilterCatalina5xx="${keywordsMap["Catalina5xx"]}"
 
 LeadingIsoDateRegex="^[0-9]{4}-[0-9]{2}-[0-9]{2}" #YYYY-MM-DD HH:mm:ss
 LeadingDateRegexDash="^[0-9]{2}-[A-Z][a-z]{2}-[0-9]{4}" #DD-Mmm-YYYY HH:mm:ss.sss 12-May-2026 09:24:06.999 --Database timestamps, Java/Oracle logs
-LeadingDateRegexSlash="^\[[0-9]{2}/[A-Z][a-z]{2}/[0-9]{4}" #[DD/Mon/YYYY:HH:mm:ss --Apache/Nginx web server logs 
+LeadingDateRegexSlash="\[[0-9]{2}/[A-Z][a-z]{2}/[0-9]{4}" #[DD/Mon/YYYY:HH:mm:ss --Apache/Nginx web server logs
+
+
 
 convert_java_date_to_iso() {
 	#--DateTime Stamp: 12-May-2026 09:24:06.999 to 2026-05-12
@@ -136,14 +142,17 @@ date_range_excerpt() {
 }
 
 
-#--SYS TOMCAT INSTALL_LOG
+#--SYS TOMCAT INSTALL_LOG. Collect List of the Log Files in range.
 echo "~Find SYS logs in the range: ${RangeHeadDate}..${RangeTailDate}" #Debug/Verbose
 RollingDay=${RangeHeadDate}
 LogNames=""
 LogsParsedInfo=""
 EndComparison=$(date -d "${RangeTailDate} + 1 day" +%Y-%m-%d)
 while [ "${RollingDay}" != "$EndComparison" ]; do
-	LogFile="${CATALINA_LOG}${RollingDay}.log"
+	LogFile="${CATALINA_LOG}${RollingDay}"
+	if [[ "$choice" == "CONF" || "$choice" == "CONF_DBG" ]]; then
+		LogFile+=".log" #-- conf_access_log.2026-02-12.log
+	fi
 	if [[ -f "$LogFile" ]]; then
 		LogNames+=" $LogFile"
 		LogsParsedInfo+="\n${LogFile}"
@@ -160,6 +169,8 @@ jraKwViewBoard="secure\/RapidBoard.jspa"
 jraKwSearch="\/rest\/api\/2\/search"
 jraKwcCreateIssue="\/rest\/api\/2\/issue"
 
+
+
 echo "~Parsing SYS logs..." #Debug/Verbose
 if [[ -n "$LogNames" ]]; then
 	echo -e "~INSTALL logs in range from ${RangeHeadDate} ${RangeHeadTime} to ${RangeTailDate} ${RangeTailTime}:${LogsParsedInfo}" > ${SeismoErrorsDensity}
@@ -169,9 +180,8 @@ if [[ -n "$LogNames" ]]; then
 	echo -e "~Events Counter and Density (events per min):\n" >> ${SeismoErrorsDensity}
 	echo -e "xxx 4xx 5xx ep" >> ${SeismoErrorsDensity}
 
-if (( is_web_log == 1 )); then #--DateTime Stamp: [12/Feb/2026:08:59:58 -0400], ts_part1: [12/Feb/2026:08:59:58, ts_part2: -0400]
-
-#--Conf
+if (( isDateIso == 1 )); then #--DateTime Stamp: [12/Feb/2026:08:59:58 -0400], ts_part1: [12/Feb/2026:08:59:58, ts_part2: -0400]
+	#--Conf
 	confKwLogin="\/login.action"
 	confKwCopyPage="\/pages\/copypage.action"
 	confKwViewPage="\/pages\/viewpage.action"
@@ -182,50 +192,57 @@ if (( is_web_log == 1 )); then #--DateTime Stamp: [12/Feb/2026:08:59:58 -0400], 
 	confKwViewPageattAchments="\/pages\/viewpageattachments.action"
 	confKwSearch="\/rest\/api\/search"
 
-		grep -Eh "${LeadingDateRegexSlash}" ${LogNames} | awk -v slch="\\" -v destFile="${SeismoErrorsDensity}" \
-			-v p0="$confKwLogin" \
-			-v p1="$confKwCopyPage" \
-			-v p2="$confKwViewPage" \
-			-v p3="$confKwCreatePage" \
-			-v p4="$confKwViewPreviousVersions" \
-			-v p5="$confKwListPage" \
-			-v p6="$confKwEditPage" \
-			-v p7="$confKwViewPageattAchments" \
-			-v p8="$confKwSearch" ' {
-				has4xx = ($0 ~ /HTTP\/1\.1 4[0-9][0-9]/)
-				has5xx = ($0 ~ /HTTP\/1\.1 5[0-9][0-9]/)
-				if ($0 ~ p0) { c0++; if(has4xx) c0_4xx++; if(has5xx) c0_5xx++ }
-				if ($0 ~ p1) { c1++; if(has4xx) c1_4xx++; if(has5xx) c1_5xx++ }
-				if ($0 ~ p2) { c2++; if(has4xx) c2_4xx++; if(has5xx) c2_5xx++ }
-				if ($0 ~ p3) { c3++; if(has4xx) c3_4xx++; if(has5xx) c3_5xx++ }
-				if ($0 ~ p4) { c4++; if(has4xx) c4_4xx++; if(has5xx) c4_5xx++ }
-				if ($0 ~ p5) { c5++; if(has4xx) c5_4xx++; if(has5xx) c5_5xx++ }
-				if ($0 ~ p6) { c6++; if(has4xx) c6_4xx++; if(has5xx) c6_5xx++ }
-				if ($0 ~ p7) { c7++; if(has4xx) c7_4xx++; if(has5xx) c7_5xx++ }
-				if ($0 ~ p8) { c8++; if(has4xx) c8_4xx++; if(has5xx) c8_5xx++ }
-				print
+	grep -Eh "${LeadingDateRegexSlash}" ${LogNames} |
+	awk -v slch="\\" -v destFile="${SeismoErrorsDensity}" \
+	-v p0="$confKwLogin" \
+	-v p1="$confKwCopyPage" \
+	-v p2="$confKwViewPage" \
+	-v p3="$confKwCreatePage" \
+	-v p4="$confKwViewPreviousVersions" \
+	-v p5="$confKwListPage" \
+	-v p6="$confKwEditPage" \
+	-v p7="$confKwViewPageattAchments" \
+	-v p8="$confKwSearch" '
+	BEGIN {
+		# Safely initialize the pattern array once at startup
+		p[0]=p0; p[1]=p1; p[2]=p2; p[3]=p3; p[4]=p4; p[5]=p5; p[6]=p6; p[7]=p7; p[8]=p8
+		logDate = "UNKNOWN_DATE"
+	}
+	{
+		# Extract date using standard string indexing instead of regex arrays
+		idx = index($0, "[")
+		if (idx > 0) {
+			logDate = substr($0, idx + 1, 11)
+		}
+		has4xx = ($0 ~ /HTTP\/1\.1"?[[:space:]]+4[0-9][0-9]/)
+		has5xx = ($0 ~ /HTTP\/1\.1"?[[:space:]]+5[0-9][0-9]/)
+		for (i=0; i<=8; i++) {
+			if ($0 ~ p[i]) {
+				c[i]++
+				if (has4xx) c_4xx[i]++
+				if (has5xx) c_5xx[i]++
 			}
-			END {
-				gsub(slch,"",p0); print (c0+0)"\t"(c0_4xx+0)"\t"(c0_5xx+0)"\t"p0 >> destFile
-				gsub(slch,"",p1); print (c1+0)"\t"(c1_4xx+0)"\t"(c1_5xx+0)"\t"p1 >> destFile
-				gsub(slch,"",p2); print (c2+0)"\t"(c2_4xx+0)"\t"(c2_5xx+0)"\t"p2 >> destFile
-				gsub(slch,"",p3); print (c3+0)"\t"(c3_4xx+0)"\t"(c3_5xx+0)"\t"p3 >> destFile
-				gsub(slch,"",p4); print (c4+0)"\t"(c4_4xx+0)"\t"(c4_5xx+0)"\t"p4 >> destFile
-				gsub(slch,"",p5); print (c5+0)"\t"(c5_4xx+0)"\t"(c5_5xx+0)"\t"p5 >> destFile
-				gsub(slch,"",p6); print (c6+0)"\t"(c6_4xx+0)"\t"(c6_5xx+0)"\t"p6 >> destFile
-				gsub(slch,"",p7); print (c7+0)"\t"(c7_4xx+0)"\t"(c7_5xx+0)"\t"p7 >> destFile
-				gsub(slch,"",p8); print (c8+0)"\t"(c8_4xx+0)"\t"(c8_5xx+0)"\t"p8 >> destFile
-				print "" >> destFile
-			}' 
+		}
+		print
+	}
+	END {
+		for (i=0; i<=8; i++) {
+			gsub(slch, "", p[i])
+			print logDate"\t"(c[i]+0)"\t"(c_4xx[i]+0)"\t"(c_5xx[i]+0)"\t"p[i] >> destFile
+		}
+		print "" >> destFile
+	}' > /dev/null
+
 		
-#--Slow loop 'while', to build the http: Errors time line chart, jsut remove de-comment
-#		| grep -E "${FilterCatalinaXxx}|${FilterCatalina5xx}" |
+#		| grep -E "${FilterCatalinaXxx}|${FilterCatalina5xx}" | 
+#		#--Attention! Slow loop 'while', to build the http: Errors time line chart, just de-comment to activate
 #		while read -r ts_part1 ts_part2 rest; do
 #			iso_date=$(convert_apache_nginx_date_to_iso "${ts_part1} ${ts_part2}")
 #			log_time="${ts_part1#*:}" #Extract time 08:59:58
 #			echo "${iso_date} ${log_time} ${rest}"
 #		done | date_range_full | sort | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdSys" "*" >> "${SeismoErrorsDensity}"
 	
+
 
 #--This is possible replacement for the code above. TODO: Separate 300/400/500
 #		INITIAL_LOGS=$(grep -Eh "${LeadingDateRegexSlash}" ${LogNames})
@@ -234,7 +251,7 @@ if (( is_web_log == 1 )); then #--DateTime Stamp: [12/Feb/2026:08:59:58 -0400], 
 #			<(echo "${INITIAL_LOGS}" | grep -E "${FilterHomeBlend}" | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdHome" "*") |
 #		date_range_full | sort >> "${SeismoErrorsDensity}"
 
-	elif (( is_web_log == 2 )); then #--DateTime Stamp: 12-May-2026 09:24:06.999
+	elif (( isDateIso == 2 )); then #--DateTime Stamp: 12-May-2026 09:24:06.999
 		grep -Eh "${LeadingDateRegexDash}" ${LogNames} | grep -E ${FilterCatalinaXxx} | while read -r date_str time_str rest; do
 			iso_date=$(convert_java_date_to_iso "${date_str}") 
 			echo "${iso_date} ${time_str} ${rest}"
@@ -252,7 +269,7 @@ echo "~Sys Execution time: ${min} minutes ${sec} seconds"
 
 
 
-#--HOME_LOG
+#--HOME_LOG. Collect List of the Log Files in range.
 echo "~Find HOME logs in the range: ${RangeHeadDate}..${RangeTailDate}" #Debug/Verbose
 LogNames=""
 LogNamesArr=()
@@ -264,12 +281,12 @@ for ((i=0; i<16; i++)); do
 		nextLogName+=".${i}"
 	fi
 	if [[ -f "${nextLogName}" ]]; then
-		#Check if log file contains target dates range. Get first and last timestamp from file
+		#--Check if log file contains target dates range. Get first and last timestamp from file
 		FIRST_LINE=$(head -n 100 "${nextLogName}" | grep -m 1 "^[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}" | awk '{print $1,$2}' | cut -d',' -f1)
 		LAST_LINE=$(tac "${nextLogName}" | grep -m 1 "^[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}" | awk '{print $1,$2}' | cut -d',' -f1)
 		firstLineEpoch=$(date -d "$FIRST_LINE" +%s 2>/dev/null)
 		lastLineEpoch=$(date -d "$LAST_LINE" +%s 2>/dev/null)
-		#Check if dates fall within this file's range
+		#--Check if dates fall within this file's range
 		if [[ ($firstLineEpoch -ge $RangeHeadEpoch && $firstLineEpoch -le $RangeTailEpoch) || ($lastLineEpoch -ge $RangeHeadEpoch && $lastLineEpoch -le $RangeTailEpoch) ||
 			($RangeHeadEpoch -ge $firstLineEpoch && $RangeHeadEpoch -le $lastLineEpoch) || ($RangeTailEpoch -ge $firstLineEpoch && $RangeTailEpoch -le $lastLineEpoch) ]]; then
 			is_range_found=1
@@ -316,3 +333,19 @@ fi
 elapsed=$(( ($(date +%s%N) - start_time) / 1000000000 )); min=$(( elapsed / 60 )); sec=$(( elapsed % 60 ))
 echo "~Home Execution time: ${min} minutes ${sec} seconds"
 
+
+}
+#EOF
+#======
+#exit 0
+#-HOME_LOG_FULL_NARROW_EXCERPT
+echo "~Save HOME logs NARROW_EXCERPT in the range: ${XcrptHeadDateTime}..${XcrptTailDateTime}" #Debug/Verbose
+echo -e "~HOME logs FULL_NARROW_EXCERPT in range from ${XcrptHeadDateTime} to ${XcrptTailDateTime}:\n${XcrptFromTheLog// /\\n}" > ${SeismoFullNarrowExcerpt}
+echo "" >> ${SeismoFullNarrowExcerpt}
+grep -Eh ${LeadingIsoDateRegex} ${XcrptFromTheLog} | date_range_excerpt >> "${SeismoFullNarrowExcerpt}"
+#grep -Eh ${LeadingIsoDateRegex} ${XcrptFromTheLog} | date_range_excerpt | sed 'G' >> "${SeismoFullNarrowExcerpt}" #With Extra \n
+
+
+#--Script execution time
+elapsed=$(( ($(date +%s%N) - start_time) / 1000000000 )); min=$(( elapsed / 60 )); sec=$(( elapsed % 60 ))
+echo "~Overall Execution time: ${min} minutes ${sec} seconds"
