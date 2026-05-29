@@ -1,3 +1,4 @@
+
 start_time=$(date +%s%N) #--start time in nanoseconds
 SM_REPORTS_DIR="./seismolog"
 if [ ! -d "$SM_REPORTS_DIR" ]; then #Check if the directory does NOT exist
@@ -12,13 +13,23 @@ SeismoFullNarrowExcerpt="${SM_REPORTS_DIR}/seismoFullNarrowExcerpt_${dtstamp}.lo
 isDateIso=1
 #choice="JIRA"
 #choice="CONF"
-choice="JIRA_DBG"
-#choice="CONF_DBG"
+#choice="JIRA_DBG"
+choice="CONF_DBG"
 APP_INST="/media/user/Storage/@jira_logs_copy/jira_sys/logs/" #--Debug@Local
 APP_HOME="/media/user/Storage/@jira_logs_copy/jira_home/log/" #--Debug@Local
 thresholdSys=1
 thresholdHome=1
 compressRate=1
+anchorPrefix="(PUT|GET|POST) (.)?(.)?(.)?(.)?(.)?(.)?(.)?(.)?"
+keyWord00="${anchorPrefix}\/EditIssue"
+keyWord01="${anchorPrefix}\/QuickEditIssue"
+keyWord02="${anchorPrefix}secure\/RapidBoard.jspa" #ViewBoard
+keyWord03="${anchorPrefix}\/rest\/api\/2\/search" #rest/api/search
+keyWord04="${anchorPrefix}\/rest\/api\/2\/issue" #CreateIssue
+keyWord05="UNUSED_ENTRY"
+keyWord06="UNUSED_ENTRY"
+keyWord07="UNUSED_ENTRY"
+keyWord08="UNUSED_ENTRY"
 if [[ "$choice" == "JIRA" ]]; then
 	APP_INST="/opt/atlassian/jira/install/logs/"
 	APP_HOME="/opt/atlassian/jira/home/log/"
@@ -36,6 +47,15 @@ elif [[ "$choice" == "CONF" ]]; then
 	APP_MAIN_LOG="${APP_HOME}atlassian-confluence.log"
 	thresholdHome=10
 	compressRate=10
+	keyWord00="${anchorPrefix}\/login.action"
+	keyWord01="${anchorPrefix}\/pages\/copypage.action"
+	keyWord02="${anchorPrefix}\/pages\/viewpage.action"
+	keyWord03="${anchorPrefix}\/pages\/createpage.action"
+	keyWord04="${anchorPrefix}\/pages\/viewpreviousversions.action"
+	keyWord05="${anchorPrefix}\/pages\/listpages.action"
+	keyWord06="${anchorPrefix}\/pages\/editpage.action"
+	keyWord07="${anchorPrefix}\/pages\/viewpageattachments.action"
+	keyWord08="${anchorPrefix}\/rest\/api\/search"
 elif [[ "$choice" == "Bitbucket" ]]; then
 	exit 0
 elif [[ "$choice" == "JIRA_DBG" ]]; then
@@ -51,7 +71,7 @@ fi
 #catalinaLogName="${CATALINA_LOG##*/}"
 #appLogName="${APP_MAIN_LOG##*/}"
 
-RangeHeadDate="2026-05-27"; RangeHeadTime="00:01"
+RangeHeadDate="2026-05-15"; RangeHeadTime="00:01"
 RangeTailDate="2026-05-28"; RangeTailTime="23:59"
 XcrptHeadDateTime="2026-03-08 16:33"
 XcrptTailDateTime="2026-03-08 16:35"
@@ -162,15 +182,6 @@ while [ "${RollingDay}" != "$EndComparison" ]; do
 	RollingDay=$(date -d "${RollingDay} + 1 day" +%Y-%m-%d)
 done
 
-#--Jira
-jraKwEditIssue="\/EditIssue"
-jraKwQuickEditIssue="\/QuickEditIssue"
-jraKwViewBoard="secure\/RapidBoard.jspa"
-jraKwSearch="\/rest\/api\/2\/search"
-jraKwcCreateIssue="\/rest\/api\/2\/issue"
-
-
-
 echo "~Parsing SYS logs..." #Debug/Verbose
 if [[ -n "$LogNames" ]]; then
 	echo -e "~INSTALL logs in range from ${RangeHeadDate} ${RangeHeadTime} to ${RangeTailDate} ${RangeTailTime}:${LogsParsedInfo}" > ${SeismoErrorsDensity}
@@ -181,28 +192,18 @@ if [[ -n "$LogNames" ]]; then
 	echo -e "xxx 4xx 5xx ep" >> ${SeismoErrorsDensity}
 
 if (( isDateIso == 1 )); then #--DateTime Stamp: [12/Feb/2026:08:59:58 -0400], ts_part1: [12/Feb/2026:08:59:58, ts_part2: -0400]
-	#--Conf
-	confKwLogin="\/login.action"
-	confKwCopyPage="\/pages\/copypage.action"
-	confKwViewPage="\/pages\/viewpage.action"
-	confKwCreatePage="\/pages\/createpage.action"
-	confKwViewPreviousVersions="\/pages\/viewpreviousversions.action"
-	confKwListPage="\/pages\/listpages.action"
-	confKwEditPage="\/pages\/editpage.action"
-	confKwViewPageattAchments="\/pages\/viewpageattachments.action"
-	confKwSearch="\/rest\/api\/search"
-
+	
 	grep -Eh "${LeadingDateRegexSlash}" ${LogNames} |
 	awk -v slch="\\" -v destFile="${SeismoErrorsDensity}" \
-	-v p0="$confKwLogin" \
-	-v p1="$confKwCopyPage" \
-	-v p2="$confKwViewPage" \
-	-v p3="$confKwCreatePage" \
-	-v p4="$confKwViewPreviousVersions" \
-	-v p5="$confKwListPage" \
-	-v p6="$confKwEditPage" \
-	-v p7="$confKwViewPageattAchments" \
-	-v p8="$confKwSearch" '
+	-v p0="$keyWord00" \
+	-v p1="$keyWord01" \
+	-v p2="$keyWord02" \
+	-v p3="$keyWord03" \
+	-v p4="$keyWord04" \
+	-v p5="$keyWord05" \
+	-v p6="$keyWord06" \
+	-v p7="$keyWord07" \
+	-v p8="$keyWord08" '
 	BEGIN {
 		# Safely initialize the pattern array once at startup
 		p[0]=p0; p[1]=p1; p[2]=p2; p[3]=p3; p[4]=p4; p[5]=p5; p[6]=p6; p[7]=p7; p[8]=p8
