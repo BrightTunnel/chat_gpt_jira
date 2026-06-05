@@ -1,11 +1,3 @@
-#!/bin/bash
-#--Atlassian Application Failure Root Cause Analyzer. Scans local application node logs for fatal error patterns.
-#--SeismoLog by Valeri Tikhonov, TD, May 2026.
-
-#bash << 'EOF'
-set enable-bracketed-paste on
-{
-
 start_time=$(date +%s%N) #--start time in nanoseconds
 SM_REPORTS_DIR="./seismolog"
 if [ ! -d "$SM_REPORTS_DIR" ]; then #Check if the directory does NOT exist
@@ -21,7 +13,7 @@ isDateIso=1
 #choice="JIRA"
 #choice="CONF"
 choice="JIRA_DBG"
-#choice="CONF_DBG"
+choice="CONF_DBG"
 APP_INST="/media/user/Storage/@jira_logs_copy/jira_sys/logs/" #--Debug@Local
 APP_HOME="/media/user/Storage/@jira_logs_copy/jira_home/log/" #--Debug@Local
 thresholdSys=1
@@ -87,7 +79,7 @@ fi
 #catalinaLogName="${CATALINA_LOG##*/}"
 #appLogName="${APP_MAIN_LOG##*/}"
 
-RangeHeadDate="2026-06-03"; RangeHeadTime="00:01"
+RangeHeadDate="2026-05-03"; RangeHeadTime="00:01"
 RangeTailDate="2026-06-04"; RangeTailTime="23:59"
 XcrptHeadDateTime="2026-03-08 16:33"
 XcrptTailDateTime="2026-03-08 16:35"
@@ -199,7 +191,7 @@ done
 
 echo "~Parsing SYS logs..." #Debug/Verbose
 if [[ -n "$LogNames" ]]; then
-	echo "SeismoLog Errors Density at $(date '+%Y-%m-%d %H:%M:%S')" >> "${SeismoErrorsDensity}"
+	echo "SeismoLog Errors Density at $(date '+%Y-%m-%d %H:%M:%S')" > "${SeismoErrorsDensity}"
 	echo -e "~INSTALL logs in range from ${RangeHeadDate} ${RangeHeadTime} to ${RangeTailDate} ${RangeTailTime}:${LogsParsedInfo}" >> ${SeismoErrorsDensity}
 	echo "~Chart Legend: [(.) HTTP Errors 2xx,3xx,4xx, (*) HTTP Errors 5xx], Filters detailes:" >> ${SeismoErrorsDensity}
 	echo " . ${FilterCatalinaXxx}" | sed 's/\[\[:space:\]\]/ /g' >> ${SeismoErrorsDensity}
@@ -207,57 +199,57 @@ if [[ -n "$LogNames" ]]; then
 	echo -e "~Events Counter and Density (events per min):\n" >> ${SeismoErrorsDensity}
 	echo -e "xxx 4xx 5xx ep" >> ${SeismoErrorsDensity}
 
-if (( isDateIso == 1 )); then #--DateTime Stamp: [12/Feb/2026:08:59:58 -0400], ts_part1: [12/Feb/2026:08:59:58, ts_part2: -0400]
-	
-	grep -Eh "${LeadingDateRegexSlash}" ${LogNames} |
-	awk -v slch="\\" -v destFile="${SeismoErrorsDensity}" \
-	-v p0="$keyWord00" \
-	-v p1="$keyWord01" \
-	-v p2="$keyWord02" \
-	-v p3="$keyWord03" \
-	-v p4="$keyWord04" \
-	-v p5="$keyWord05" \
-	-v p6="$keyWord06" \
-	-v p7="$keyWord07" \
-	-v p8="$keyWord08" '
-	BEGIN {
-		# Safely initialize the pattern array once at startup
-		p[0]=p0; p[1]=p1; p[2]=p2; p[3]=p3; p[4]=p4; p[5]=p5; p[6]=p6; p[7]=p7; p[8]=p8
-		logDate = "UNKNOWN_DATE"
-	}
-	{
-		# Extract date using standard string indexing instead of regex arrays
-		idx = index($0, "[")
-		if (idx > 0) {
-			logDate = substr($0, idx + 1, 11)
+	if (( isDateIso == 1 )); then #--DateTime Stamp: [12/Feb/2026:08:59:58 -0400], ts_part1: [12/Feb/2026:08:59:58, ts_part2: -0400]
+		grep -Eh "${LeadingDateRegexSlash}" ${LogNames} |
+		awk -v slch="\\" -v destFile="${SeismoErrorsDensity}" \
+		-v p0="$keyWord00" \
+		-v p1="$keyWord01" \
+		-v p2="$keyWord02" \
+		-v p3="$keyWord03" \
+		-v p4="$keyWord04" \
+		-v p5="$keyWord05" \
+		-v p6="$keyWord06" \
+		-v p7="$keyWord07" \
+		-v p8="$keyWord08" '
+		BEGIN {
+			# Safely initialize the pattern array once at startup
+			p[0]=p0; p[1]=p1; p[2]=p2; p[3]=p3; p[4]=p4; p[5]=p5; p[6]=p6; p[7]=p7; p[8]=p8
+			logDate = "UNKNOWN_DATE"
 		}
-		has4xx = ($0 ~ /HTTP\/1\.1"?[[:space:]]+4[0-9][0-9]/)
-		has5xx = ($0 ~ /HTTP\/1\.1"?[[:space:]]+5[0-9][0-9]/)
-		for (i=0; i<=8; i++) {
-			if ($0 ~ p[i]) {
-				c[i]++
-				if (has4xx) c_4xx[i]++
-				if (has5xx) c_5xx[i]++
+		{
+			# Extract date using standard string indexing instead of regex arrays
+			idx = index($0, "[")
+			if (idx > 0) {
+				logDate = substr($0, idx + 1, 11)
 			}
+			has4xx = ($0 ~ /HTTP\/1\.1"?[[:space:]]+4[0-9][0-9]/)
+			has5xx = ($0 ~ /HTTP\/1\.1"?[[:space:]]+5[0-9][0-9]/)
+			for (i=0; i<=8; i++) {
+				if ($0 ~ p[i]) {
+					c[i]++
+					if (has4xx) c_4xx[i]++
+					if (has5xx) c_5xx[i]++
+				}
+			}
+			print
 		}
-		print
-	}
-	END {
-		for (i=0; i<=8; i++) {
-			gsub(slch, "", p[i])
-			# print logDate"\t"(c[i]+0)"\t"(c_4xx[i]+0)"\t"(c_5xx[i]+0)"\t"p[i] >> destFile
-			print (c[i]+0)"\t"(c_4xx[i]+0)"\t"(c_5xx[i]+0)"\t"p[i] >> destFile
-		}
-		print "" >> destFile 
-	}' > /dev/null
-#	}' | grep -E "${FilterCatalinaXxx}|${FilterCatalina5xx}" |
-#	#--Note: This slow loop builds http response chart. Comment it to speedup parsing.
-#	while read -r ts_part1 ts_part2 rest; do
-#		iso_date=$(convert_apache_nginx_date_to_iso "${ts_part1} ${ts_part2}")
-#		log_time="${ts_part1#*:}" #Extract time 08:59:58
-#		echo "${iso_date} ${log_time} ${rest}"
-#	done | date_range_full | sort | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdSys" "*" >> "${SeismoErrorsDensity}"
-
+		END {
+			for (i=0; i<=8; i++) {
+				gsub(slch, "", p[i])
+				# print logDate"\t"(c[i]+0)"\t"(c_4xx[i]+0)"\t"(c_5xx[i]+0)"\t"p[i] >> destFile
+				print (c[i]+0)"\t"(c_4xx[i]+0)"\t"(c_5xx[i]+0)"\t"p[i] >> destFile
+			}
+			print "" >> destFile 
+		}' > /dev/null
+#		}' | grep -E "${FilterCatalinaXxx}|${FilterCatalina5xx}" |
+#		#--Note: This slow loop builds http response chart. Comment it to speedup parsing.
+#		while read -r ts_part1 ts_part2 rest; do
+#			iso_date=$(convert_apache_nginx_date_to_iso "${ts_part1} ${ts_part2}")
+#			log_time="${ts_part1#*:}" #Extract time 08:59:58
+#			echo "${iso_date} ${log_time} ${rest}"
+#		done | date_range_full | sort | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdSys" "*" >> "${SeismoErrorsDensity}"
+#		#--Move this line up
+#		}' > /dev/null
 
 
 #--This is possible replacement for the code above. TODO: Separate 300/400/500
@@ -273,7 +265,11 @@ if (( isDateIso == 1 )); then #--DateTime Stamp: [12/Feb/2026:08:59:58 -0400], t
 			echo "${iso_date} ${time_str} ${rest}"
 			done | date_range_full | sort | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdSys" "*" >> ${SeismoErrorsDensity}
 	fi
-	#--Save All found Error lines
+
+
+	elapsed=$(( ($(date +%s%N) - start_time) / 1000000000 )); min=$(( elapsed / 60 )); sec=$(( elapsed % 60 ))
+	echo "~1.Elapsed ${min}:${sec}. Exctract and Save Access Errors Only:"
+	#--Exctract and Save Error Lines Only
 	echo -e "\n~SYS logs ERRORS EXCERPT in range from: ${RangeHeadDate} ${RangeHeadTime} to: ${RangeTailDate} ${RangeTailTime}:${LogNames// /\\n}\n" >> ${SeismoErrorsSysExtract}
 	grep -Eh ${LeadingDateRegexSlash} ${LogNames} | grep -E ${FilterCatalinaXxx} >> ${SeismoErrorsSysExtract}
 else
@@ -281,7 +277,7 @@ else
 fi
 
 elapsed=$(( ($(date +%s%N) - start_time) / 1000000000 )); min=$(( elapsed / 60 )); sec=$(( elapsed % 60 ))
-echo "~Sys Execution time: ${min} minutes ${sec} seconds"
+echo "~2.Elapsed ${min}:${sec}. Parse HOME Logs:"
 
 
 
@@ -348,21 +344,4 @@ else
 fi
 
 elapsed=$(( ($(date +%s%N) - start_time) / 1000000000 )); min=$(( elapsed / 60 )); sec=$(( elapsed % 60 ))
-echo "~Home Execution time: ${min} minutes ${sec} seconds"
-
-
-}
-#EOF
-#======
-#exit 0
-#-HOME_LOG_FULL_NARROW_EXCERPT
-echo "~Save HOME logs NARROW_EXCERPT in the range: ${XcrptHeadDateTime}..${XcrptTailDateTime}" #Debug/Verbose
-echo -e "~HOME logs FULL_NARROW_EXCERPT in range from ${XcrptHeadDateTime} to ${XcrptTailDateTime}:\n${XcrptFromTheLog// /\\n}" > ${SeismoFullNarrowExcerpt}
-echo "" >> ${SeismoFullNarrowExcerpt}
-grep -Eh ${LeadingIsoDateRegex} ${XcrptFromTheLog} | date_range_excerpt >> "${SeismoFullNarrowExcerpt}"
-#grep -Eh ${LeadingIsoDateRegex} ${XcrptFromTheLog} | date_range_excerpt | sed 'G' >> "${SeismoFullNarrowExcerpt}" #With Extra \n
-
-
-#--Script execution time
-elapsed=$(( ($(date +%s%N) - start_time) / 1000000000 )); min=$(( elapsed / 60 )); sec=$(( elapsed % 60 ))
-echo "~Overall Execution time: ${min} minutes ${sec} seconds"
+echo "~3.Elapsed ${min}:${sec}. Parsed HOME Logs."
