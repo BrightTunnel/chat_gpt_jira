@@ -1,3 +1,45 @@
+
+#--jira dc thread pool exhausted
+A thread pool exhaustion in Jira Data Center (DC) means all execution threads allocated to a specific pool (such as 
+	--Tomcat HTTP threads, 
+	--database connection pools, or 
+	--Caesium/Automation background executors) are completely occupied. 
+This causes incoming actions to drop or queue up, leading to high latency, sluggish behavior, or an outright cluster node outage.
+
+1. Identify the Culprit Pool. You must first find out which specific pool is fully saturated:
+	Tomcat HTTP Pool (http-nio): Users see a "Site cannot be reached" error or a spinning loading icon. The logs may show SYN_RECV network states or timeouts.
+	Database Connection Pool (DBCP): Jira logs complain about Timeout waiting for idle object or SQLTransientConnectionException. You can monitor this live via Cog Icon > System > Database Monitoring.
+	Caesium / Automation Pool: Background tasks, mail handlers, or automation rules freeze or execute with massive delays.
+https://support.atlassian.com/jira/kb/slow-performance-and-dangerous-use-of-multiple-connections-error-in-jira/
+https://jira.atlassian.com/browse/JRASERVER-39677
+https://jira.atlassian.com/browse/BSERV-13379
+https://confluence.atlassian.com/jirakb/troubleshooting-slow-stuck-notification-issues-in-jira-service-management-server-1041076874.html
+https://support.atlassian.com/jira/kb/jira-is-unresponsive-threads-stuck/
+
+2. Run Immediate Diagnostics. Do not blindly increase pool sizes, as this can crash your underlying OS or DB resources. Follow these steps to find the root cause
+	Generate Thread Dumps: Run Atlassian's Thread Diagnostics Tool to grab 5-6 thread dumps at 10-second intervals.
+		https://confluence.atlassian.com/support/thread-diagnostics-1044790305.html
+	Analyze Stuck Threads: Open the dumps in a viewer like TDA or IBM TMDA. Look for hundreds of threads sitting in the exact same state (e.g., waiting for an API response, frozen by a third-party app, or blocked by a database lock)
+	Check for Memory Pressure: Heavy Garbage Collection (GC) pauses can simulate thread exhaustion. Check atlassian-jira-gc.log to ensure "Stop-the-World" pauses aren't freezing the JVM.
+	
+
+https://support.atlassian.com/jira/kb/jira-is-unresponsive-threads-stuck/ --Cloud and Data Center
+https://support.atlassian.com/jira/kb/troubleshooting-jira-performance-with-thread-dumps/
+
+https://confluence.atlassian.com/automationkb/automation-rules-aren-t-running-for-a-period-of-time-in-jira-1456177175.html
+https://support.atlassian.com/jira/kb/tuning-http-and-database-connection-pooling-threads-for-jira/
+https://support.atlassian.com/jira/kb/jira-is-unresponsive-either-consistently-or-randomly-due-to-stuck-threads-and-or-thread-pool-exhaustion/
+
+
+
+#!/bin/bash
+#--Atlassian Application Failure Root Cause Analyzer. Scans local application node logs for fatal error patterns.
+#--SeismoLog by Valeri Tikhonov, TD, May 2026.
+
+#bash << 'EOF'
+set enable-bracketed-paste on
+{
+
 start_time=$(date +%s%N) #--start time in nanoseconds
 SM_REPORTS_DIR="./seismolog"
 if [ ! -d "$SM_REPORTS_DIR" ]; then #Check if the directory does NOT exist
@@ -345,3 +387,19 @@ fi
 
 elapsed=$(( ($(date +%s%N) - start_time) / 1000000000 )); min=$(( elapsed / 60 )); sec=$(( elapsed % 60 ))
 echo "~3.Elapsed ${min}:${sec}. Parsed HOME Logs."
+
+}
+#EOF
+#======
+#exit 0
+#-HOME_LOG_FULL_NARROW_EXCERPT
+echo "~Save HOME logs NARROW_EXCERPT in the range: ${XcrptHeadDateTime}..${XcrptTailDateTime}" #Debug/Verbose
+echo -e "~HOME logs FULL_NARROW_EXCERPT in range from ${XcrptHeadDateTime} to ${XcrptTailDateTime}:\n${XcrptFromTheLog// /\\n}" > ${SeismoFullNarrowExcerpt}
+echo "" >> ${SeismoFullNarrowExcerpt}
+grep -Eh ${LeadingIsoDateRegex} ${XcrptFromTheLog} | date_range_excerpt >> "${SeismoFullNarrowExcerpt}"
+#grep -Eh ${LeadingIsoDateRegex} ${XcrptFromTheLog} | date_range_excerpt | sed 'G' >> "${SeismoFullNarrowExcerpt}" #With Extra \n
+
+
+#--Script execution time
+elapsed=$(( ($(date +%s%N) - start_time) / 1000000000 )); min=$(( elapsed / 60 )); sec=$(( elapsed % 60 ))
+echo "~4.Elapsed ${min}:${sec}. Overall Execution."
