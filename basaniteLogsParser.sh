@@ -1,37 +1,3 @@
-
-#--jira dc thread pool exhausted
-A thread pool exhaustion in Jira Data Center (DC) means all execution threads allocated to a specific pool (such as 
-	--Tomcat HTTP threads, 
-	--database connection pools, or 
-	--Caesium/Automation background executors) are completely occupied. 
-This causes incoming actions to drop or queue up, leading to high latency, sluggish behavior, or an outright cluster node outage.
-
-1. Identify the Culprit Pool. You must first find out which specific pool is fully saturated:
-	Tomcat HTTP Pool (http-nio): Users see a "Site cannot be reached" error or a spinning loading icon. The logs may show SYN_RECV network states or timeouts.
-	Database Connection Pool (DBCP): Jira logs complain about Timeout waiting for idle object or SQLTransientConnectionException. You can monitor this live via Cog Icon > System > Database Monitoring.
-	Caesium / Automation Pool: Background tasks, mail handlers, or automation rules freeze or execute with massive delays.
-https://support.atlassian.com/jira/kb/slow-performance-and-dangerous-use-of-multiple-connections-error-in-jira/
-https://jira.atlassian.com/browse/JRASERVER-39677
-https://jira.atlassian.com/browse/BSERV-13379
-https://confluence.atlassian.com/jirakb/troubleshooting-slow-stuck-notification-issues-in-jira-service-management-server-1041076874.html
-https://support.atlassian.com/jira/kb/jira-is-unresponsive-threads-stuck/
-
-2. Run Immediate Diagnostics. Do not blindly increase pool sizes, as this can crash your underlying OS or DB resources. Follow these steps to find the root cause
-	Generate Thread Dumps: Run Atlassian's Thread Diagnostics Tool to grab 5-6 thread dumps at 10-second intervals.
-		https://confluence.atlassian.com/support/thread-diagnostics-1044790305.html
-	Analyze Stuck Threads: Open the dumps in a viewer like TDA or IBM TMDA. Look for hundreds of threads sitting in the exact same state (e.g., waiting for an API response, frozen by a third-party app, or blocked by a database lock)
-	Check for Memory Pressure: Heavy Garbage Collection (GC) pauses can simulate thread exhaustion. Check atlassian-jira-gc.log to ensure "Stop-the-World" pauses aren't freezing the JVM.
-	
-
-https://support.atlassian.com/jira/kb/jira-is-unresponsive-threads-stuck/ --Cloud and Data Center
-https://support.atlassian.com/jira/kb/troubleshooting-jira-performance-with-thread-dumps/
-
-https://confluence.atlassian.com/automationkb/automation-rules-aren-t-running-for-a-period-of-time-in-jira-1456177175.html
-https://support.atlassian.com/jira/kb/tuning-http-and-database-connection-pooling-threads-for-jira/
-https://support.atlassian.com/jira/kb/jira-is-unresponsive-either-consistently-or-randomly-due-to-stuck-threads-and-or-thread-pool-exhaustion/
-
-
-
 #!/bin/bash
 #--Atlassian Application Failure Root Cause Analyzer. Scans local application node logs for fatal error patterns.
 #--SeismoLog by Valeri Tikhonov, TD, May 2026.
@@ -55,16 +21,16 @@ isDateIso=1
 #choice="JIRA"
 #choice="CONF"
 choice="JIRA_DBG"
-choice="CONF_DBG"
+#choice="CONF_DBG"
 APP_INST="/media/user/Storage/@jira_logs_copy/jira_sys/logs/" #--Debug@Local
 APP_HOME="/media/user/Storage/@jira_logs_copy/jira_home/log/" #--Debug@Local
 thresholdSys=1
 thresholdHome=1
 compressRate=1
-anchorPrefix="(PUT|GET|POST) "
-keyWord00="${anchorPrefix}\/EditIssue"
-keyWord01="${anchorPrefix}\/QuickEditIssue"
-keyWord02="${anchorPrefix}secure\/RapidBoard.jspa" #ViewBoard
+anchorPrefix="(GET|PUT|POST) "
+keyWord00="${anchorPrefix}\/secure\/EditIssue"
+keyWord01="${anchorPrefix}\/secure\/QuickEditIssue"
+keyWord02="${anchorPrefix}\/secure\/RapidBoard.jspa" #ViewBoard
 keyWord03="${anchorPrefix}\/rest\/api\/2\/search" #rest/api/search
 keyWord04="${anchorPrefix}\/rest\/api\/2\/issue" #CreateIssue
 keyWord05="UNUSED_EP"
@@ -122,7 +88,7 @@ fi
 #appLogName="${APP_MAIN_LOG##*/}"
 
 RangeHeadDate="2026-05-03"; RangeHeadTime="00:01"
-RangeTailDate="2026-06-04"; RangeTailTime="23:59"
+RangeTailDate="2026-06-11"; RangeTailTime="23:59"
 XcrptHeadDateTime="2026-03-08 16:33"
 XcrptTailDateTime="2026-03-08 16:35"
 XcrptFromTheLog="${APP_HOME}atlassian-jira.log ${APP_HOME}atlassian-jira.log.1"
@@ -239,7 +205,7 @@ if [[ -n "$LogNames" ]]; then
 	echo " . ${FilterCatalinaXxx}" | sed 's/\[\[:space:\]\]/ /g' >> ${SeismoErrorsDensity}
 	echo " * ${FilterCatalina5xx}" | sed 's/\[\[:space:\]\]/ /g' >> ${SeismoErrorsDensity}
 	echo -e "~Events Counter and Density (events per min):\n" >> ${SeismoErrorsDensity}
-	echo -e "xxx 4xx 5xx ep" >> ${SeismoErrorsDensity}
+	echo -e "xxx 3xx 4xx 5xx ep" >> ${SeismoErrorsDensity}
 
 	if (( isDateIso == 1 )); then #--DateTime Stamp: [12/Feb/2026:08:59:58 -0400], ts_part1: [12/Feb/2026:08:59:58, ts_part2: -0400]
 		grep -Eh "${LeadingDateRegexSlash}" ${LogNames} |
@@ -264,11 +230,13 @@ if [[ -n "$LogNames" ]]; then
 			if (idx > 0) {
 				logDate = substr($0, idx + 1, 11)
 			}
+			has3xx = ($0 ~ /HTTP\/1\.1"?[[:space:]]+3[0-9][0-9]/)
 			has4xx = ($0 ~ /HTTP\/1\.1"?[[:space:]]+4[0-9][0-9]/)
 			has5xx = ($0 ~ /HTTP\/1\.1"?[[:space:]]+5[0-9][0-9]/)
 			for (i=0; i<=8; i++) {
 				if ($0 ~ p[i]) {
 					c[i]++
+					if (has3xx) c_3xx[i]++
 					if (has4xx) c_4xx[i]++
 					if (has5xx) c_5xx[i]++
 				}
@@ -279,7 +247,7 @@ if [[ -n "$LogNames" ]]; then
 			for (i=0; i<=8; i++) {
 				gsub(slch, "", p[i])
 				# print logDate"\t"(c[i]+0)"\t"(c_4xx[i]+0)"\t"(c_5xx[i]+0)"\t"p[i] >> destFile
-				print (c[i]+0)"\t"(c_4xx[i]+0)"\t"(c_5xx[i]+0)"\t"p[i] >> destFile
+				print (c[i]+0)"\t"(c_3xx[i]+0)"\t"(c_4xx[i]+0)"\t"(c_5xx[i]+0)"\t"p[i] >> destFile
 			}
 			print "" >> destFile 
 		}' > /dev/null
