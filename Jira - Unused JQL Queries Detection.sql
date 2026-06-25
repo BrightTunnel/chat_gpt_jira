@@ -84,15 +84,18 @@ SELECT sr.id, sr.filtername, cu.user_name, sr.reqcontent --SELECT cu.user_name, 
 
 --Jira filters owned by invalid users
 --https://support.atlassian.com/portfolio-insights/docs/jira-filters-owned-by-invalid-users/
-SELECT DISTINCT sr.filtername AS "Filter name", sr.username AS "Filter username", sr.authorname AS "Filter author", cwu.lower_email_address AS "Filter inactive user email address", cwu.display_name AS "Filter inactive user display name", 
-	au.user_key AS "Filter inactive user user key", CASE WHEN cwu.active = 0 THEN 'Inactive' ELSE 'Active' END AS "User status", sr.reqcontent AS "Filter JQL"
-FROM cwd_user cwu
-INNER JOIN app_user au ON (cwu.lower_user_name = au.lower_user_name)
-JOIN searchrequest sr ON ((sr.username = cwu.lower_user_name OR sr.username = au.user_key)
-OR ( sr.authorname = cwu.lower_user_name OR sr.authorname = au.user_key) )
-WHERE cwu.active = 0;
-
-
+SELECT 
+	DISTINCT sr.filtername AS "Filter name",
+	sr.username AS "Filter username",
+	sr.authorname AS "Filter author",
+	cwu.lower_email_address AS "Filter inactive user email address",
+	cwu.display_name AS "Filter inactive user display name",
+	au.user_key AS "Filter inactive user user key",
+	CASE WHEN cwu.active = 0 THEN 'Inactive' ELSE 'Active' END AS "User status", sr.reqcontent AS "Filter JQL"
+	FROM cwd_user cwu
+	INNER JOIN app_user au ON (cwu.lower_user_name = au.lower_user_name)
+	JOIN searchrequest sr ON ((sr.username = cwu.lower_user_name OR sr.username = au.user_key) OR ( sr.authorname = cwu.lower_user_name OR sr.authorname = au.user_key))
+	WHERE cwu.active = 0;
 
 
 
