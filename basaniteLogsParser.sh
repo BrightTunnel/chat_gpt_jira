@@ -17,7 +17,7 @@ SeismoSysLogsErrorsExcerpt="${SM_REPORTS_DIR}/seismoSysLogsErrorsExcerpt_${dtsta
 SeismoHomeLogsErrorsExcerpt="${SM_REPORTS_DIR}/seismoHomeLogsErrorsExcerpt_${dtstamp}.log"
 SeismoHomeLogsAllInTimeRange="${SM_REPORTS_DIR}/seismoHomeLogsAllInTimeRange_${dtstamp}.log"
 
-skipSystemLog=1 #--Skip slow ~15 minutes process
+skipSystemLog=1 #--Skip slow (about 15 minutes) process
 isDateIso=1
 #choice="JIRA"
 #choice="CONF"
@@ -181,7 +181,7 @@ date_range_excerpt() {
 
 if (( skipSystemLog == 0 )); then
 	#--SYS TOMCAT INSTALL_LOG. Collect List of the Log Files in range.
-	echo "~Find SYS logs in the range: ${RangeHeadDate}..${RangeTailDate}" #Debug/Verbose
+	echo "~1.Parse SYS logs in the range: ${RangeHeadDate}..${RangeTailDate}" #Debug/Verbose
 	RollingDay=${RangeHeadDate}
 	LogNames=""
 	LogsParsedInfo=""
@@ -199,8 +199,6 @@ if (( skipSystemLog == 0 )); then
 		fi
 		RollingDay=$(date -d "${RollingDay} + 1 day" +%Y-%m-%d)
 	done
-	
-	echo "~Parsing SYS logs..." #Debug/Verbose
 	if [[ -n "$LogNames" ]]; then
 		echo "SeismoLog Errors Density at $(date '+%Y-%m-%d %H:%M:%S')" > "${SeismoErrorsDensity}"
 		echo -e "~INSTALL logs in range from ${RangeHeadDate} ${RangeHeadTime} to ${RangeTailDate} ${RangeTailTime}:${LogsParsedInfo}" >> ${SeismoErrorsDensity}
@@ -281,21 +279,18 @@ if (( skipSystemLog == 0 )); then
 	
 	
 		elapsed=$(( ($(date +%s%N) - start_time) / 1000000000 )); min=$(( elapsed / 60 )); sec=$(( elapsed % 60 ))
-		echo "~1. Sys Log parsed. Elapsed ${min}:${sec}. Exctract and Save Access Errors Only..."
+		echo "~2.Elapsed ${min}:${sec}. Exctract and Save Access Log Error Entries to: " ${SeismoSysLogsErrorsExcerpt}
 		#--Exctract and Save Error Lines Only
 		echo -e "\n~SYS logs ERRORS EXCERPT in range from: ${RangeHeadDate} ${RangeHeadTime} to: ${RangeTailDate} ${RangeTailTime}:${LogNames// /\\n}\n" >> ${SeismoSysLogsErrorsExcerpt}
 		grep -Eh ${LeadingDateRegexSlash} ${LogNames} | grep -E ${FilterCatalinaXxx} >> ${SeismoSysLogsErrorsExcerpt}
 	else
 		echo "~No access to INSTALL logs at: ${APP_INST}, or logs in range not found." >> ${SeismoErrorsDensity}
 	fi
-	
-	elapsed=$(( ($(date +%s%N) - start_time) / 1000000000 )); min=$(( elapsed / 60 )); sec=$(( elapsed % 60 ))
-	echo "~2. Exctract Access Errors Only. Elapsed ${min}:${sec}. Parse HOME Logs..."
 fi #--skipSystemLog
 
-
 #--HOME_LOG. Collect List of the Log Files in range.
-echo "~Find HOME logs in the range: ${RangeHeadDate}..${RangeTailDate}" #Debug/Verbose
+elapsed=$(( ($(date +%s%N) - start_time) / 1000000000 )); min=$(( elapsed / 60 )); sec=$(( elapsed % 60 ))
+echo "~3.Elapsed ${min}:${sec}. Find HOME logs in the range: ${RangeHeadDate}..${RangeTailDate}" #Debug/Verbose
 LogNames=""
 LogNamesArr=()
 lstOfHomeLogFiles=""
@@ -334,7 +329,7 @@ for ((i=0; i<16; i++)); do
 	fi
 done
 
-echo "~Parsing HOME logs..." #Debug/Verbose
+#echo "~~~Parsing HOME logs..." #Debug/Verbose
 if [[ "${#LogNamesArr[@]}" -gt 0 ]]; then
 	echo -e "\n~HOME logs in range from: ${RangeHeadDate} ${RangeHeadTime} to: ${RangeTailDate} ${RangeTailTime}:${lstOfHomeLogFiles}" >> ${SeismoErrorsDensity}
 	echo "~Chart Legend: [(*) Clogging, (.) Other Errors], Filters detailes:" >> ${SeismoErrorsDensity}
@@ -357,14 +352,14 @@ else
 fi
 
 elapsed=$(( ($(date +%s%N) - start_time) / 1000000000 )); min=$(( elapsed / 60 )); sec=$(( elapsed % 60 ))
-echo "~3.Parsed HOME Logs. Elapsed ${min}:${sec}."
+echo "~4.Elapsed ${min}:${sec}."
 
 }
 #EOF
 #======
 #exit 0
 #-HOME_LOG_ALL_IN_TIME_RANGE_CLIP
-echo "~Save HOME_LOGS_ALL_IN_TIME_RANGE_CLIP in the range: ${XcrptHeadDateTime}..${XcrptTailDateTime}" #Debug/Verbose
+echo "~5.Save HOME_LOGS_ALL_IN_TIME_RANGE_CLIP in the range: ${XcrptHeadDateTime}..${XcrptTailDateTime}" #Debug/Verbose
 echo -e "~HOME_LOGS_ALL_IN_TIME_RANGE_CLIP in range from ${XcrptHeadDateTime} to ${XcrptTailDateTime}:\n${XcrptFromTheLog// /\\n}" > ${SeismoHomeLogsAllInTimeRange}
 echo "" >> ${SeismoHomeLogsAllInTimeRange}
 grep -Eh ${LeadingIsoDateRegex} ${XcrptFromTheLog} | date_range_excerpt >> "${SeismoHomeLogsAllInTimeRange}"
@@ -373,5 +368,4 @@ grep -Eh ${LeadingIsoDateRegex} ${XcrptFromTheLog} | date_range_excerpt >> "${Se
 
 #--Script execution time
 elapsed=$(( ($(date +%s%N) - start_time) / 1000000000 )); min=$(( elapsed / 60 )); sec=$(( elapsed % 60 ))
-echo "~4.Elapsed ${min}:${sec}. Overall Execution."
-
+echo "~6.Elapsed ${min}:${sec}. Batch execution complete."
