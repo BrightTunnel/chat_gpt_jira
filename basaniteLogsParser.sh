@@ -310,6 +310,7 @@ for ((i=0; i<16; i++)); do
 		LAST_LINE=$(tac "${nextLogName}" | grep -m 1 "^[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}" | awk '{print $1,$2}' | cut -d',' -f1)
 		firstLineEpoch=$(date -d "$FIRST_LINE" +%s 2>/dev/null)
 		lastLineEpoch=$(date -d "$LAST_LINE" +%s 2>/dev/null)
+		timeSpanEpoch=$(( (lastLineEpoch - firstLineEpoch) / 3600 ))
 		#--Check if dates fall within this file's range
 		if [[ ($firstLineEpoch -ge $RangeHeadEpoch && $firstLineEpoch -le $RangeTailEpoch) || ($lastLineEpoch -ge $RangeHeadEpoch && $lastLineEpoch -le $RangeTailEpoch) ||
 			($RangeHeadEpoch -ge $firstLineEpoch && $RangeHeadEpoch -le $lastLineEpoch) || ($RangeTailEpoch -ge $firstLineEpoch && $RangeTailEpoch -le $lastLineEpoch) ]]; then
@@ -320,7 +321,7 @@ for ((i=0; i<16; i++)); do
 				LogNames+=" "
 			fi
 			LogNames+="${nextLogName}"
-			lstOfHomeLogFiles+="\n${nextLogName}\t[${FIRST_LINE}..${LAST_LINE}]"
+			lstOfHomeLogFiles+="\n${nextLogName}\t[${FIRST_LINE}..${LAST_LINE}] ${timeSpanEpoch} hrs"
 			echo -e "InTheRange: ${nextLogName} * ${FIRST_LINE} - ${LAST_LINE}" #Debug/Verbose
 		elif [[ ${is_range_found} -eq 1 ]]; then
 			echo -e "OutOfRange: ${nextLogName}   ${FIRST_LINE} - ${LAST_LINE}" #Debug/Verbose
