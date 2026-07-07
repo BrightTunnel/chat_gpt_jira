@@ -12,7 +12,7 @@ if [ ! -d "$SM_REPORTS_DIR" ]; then #Check if the directory does NOT exist
 	mkdir -p "$SM_REPORTS_DIR"
 fi
 dtstamp=$(date +"%Y%m%d_%H%M")
-SeismoErrorsDensity="${SM_REPORTS_DIR}/seismoErrorsDensity_${dtstamp}.log"
+FileSeismoErrorsDensity="${SM_REPORTS_DIR}/seismoErrorsDensity_${dtstamp}.log"
 SeismoSysLogsErrorsExcerpt="${SM_REPORTS_DIR}/seismoSysLogsErrorsExcerpt_${dtstamp}.log"
 SeismoHomeLogsErrorsExcerpt="${SM_REPORTS_DIR}/seismoHomeLogsErrorsExcerpt_${dtstamp}.log"
 SeismoHomeLogsAllInTimeRange="${SM_REPORTS_DIR}/seismoHomeLogsAllInTimeRange_${dtstamp}.log"
@@ -99,7 +99,8 @@ RangeTailEpoch=$(date -d "${RangeTailDate} ${RangeTailTime}" +%s)
 declare -A keywordsMap
 keywordsMap["CatalinaXxx"]="[[:space:]]HTTP/1.1[[:space:]]2|[[:space:]]HTTP/1.1[[:space:]]3|[[:space:]]HTTP/1.1[[:space:]]4" #[HTTP/1.1 403]
 keywordsMap["Catalina5xx"]="[[:space:]]HTTP/1.1[[:space:]]5" #[HTTP/1.1 403]
-keywordsMap["Atlassian-errors"]="[[:space:]](ERROR|FATAL|SEVERE|CRITICAL)[[:space:]]"
+keywordsMap["Log4jLogErrors"]="[[:space:]](ERROR|FATAL|SEVERE|CRITICAL)[[:space:]]"
+keywordsMap["Log4jLogExcludeLevels"]="[[:space:]](WARN|INFO|DEBUG|TRACE)[[:space:]]"
 keywordsMap["Exceptions"]="[A-Za-z0-9\.]+Exception"
 keywordsMap["SlowRESTRequests"]="Request.*took|REQUEST"
 keywordsMap["Cluster-health"]="Hazelcast|onClusterPanicEvent|Cluster.*lost|node.*not[[:space:]]responding|heartbeat|split[[:space:]]brain"
@@ -112,9 +113,12 @@ keywordsMap["SlowJQL"]=""
 keywordsMap["Mix"]="has[[:space:]]failed|Failed[[:space:]]to[[:space:]]delete|Uh[[:space:]]oh" #WARN: Failed to delete a remote link
 keywordsMap["NoiseCSSErrorListener"]="csskit.antlr4.CSSErrorListener" #--Fixed in new version of DC Confl 
 keywordsMap["NoiseClusterTimeout"]="Timeout[[:space:]]while[[:space:]]publishing[[:space:]]event[[:space:]]to[[:space:]]cluster"
-FilterHomeNoise="${keywordsMap["NoiseClusterTimeout"]}"
 
-FilterHomeBlend="${keywordsMap["Atlassian-errors"]}"
+FilterHomeNoise="${keywordsMap["NoiseClusterTimeout"]}"
+#FilterLog4jExcludeLevels="$^" #--TO_DEBUG: Allow all Log4jLog Levels 
+FilterLog4jExcludeLevels="${keywordsMap["Log4jLogExcludeLevels"]}" #--Allow all except listed Log4jLog Levels
+
+FilterHomeBlend="${keywordsMap["Log4jLogErrors"]}"
 FilterHomeBlend+="|${keywordsMap["Exceptions"]}"
 FilterHomeBlend+="|${keywordsMap["Cluster-health"]}"
 FilterHomeBlend+="|${keywordsMap["JvmOutOfMemory"]}"
@@ -200,17 +204,17 @@ if (( skipSystemLog == 0 )); then
 		RollingDay=$(date -d "${RollingDay} + 1 day" +%Y-%m-%d)
 	done
 	if [[ -n "$LogNames" ]]; then
-		echo "SeismoLog Errors Density at $(date '+%Y-%m-%d %H:%M:%S')" > "${SeismoErrorsDensity}"
-		echo -e "~INSTALL logs in range from ${RangeHeadDate} ${RangeHeadTime} to ${RangeTailDate} ${RangeTailTime}:${LogsParsedInfo}" >> ${SeismoErrorsDensity}
-		echo "~Chart Legend: [(.) HTTP Errors 2xx,3xx,4xx, (*) HTTP Errors 5xx], Filters detailes:" >> ${SeismoErrorsDensity}
-		echo " . ${FilterCatalinaXxx}" | sed 's/\[\[:space:\]\]/ /g' >> ${SeismoErrorsDensity}
-		echo " * ${FilterCatalina5xx}" | sed 's/\[\[:space:\]\]/ /g' >> ${SeismoErrorsDensity}
-		echo -e "~Events Counter and Density (events per min):\n" >> ${SeismoErrorsDensity}
-		echo -e "xxx 3xx 4xx 5xx ep" >> ${SeismoErrorsDensity}
+		echo "SeismoLog Errors Density at $(date '+%Y-%m-%d %H:%M:%S')" > "${FileSeismoErrorsDensity}"
+		echo -e "~INSTALL logs in range from ${RangeHeadDate} ${RangeHeadTime} to ${RangeTailDate} ${RangeTailTime}:${LogsParsedInfo}" >> ${FileSeismoErrorsDensity}
+		echo "~Chart Legend: [(.) HTTP Errors 2xx,3xx,4xx, (*) HTTP Errors 5xx], Filters detailes:" >> ${FileSeismoErrorsDensity}
+		echo " . ${FilterCatalinaXxx}" | sed 's/\[\[:space:\]\]/ /g' >> ${FileSeismoErrorsDensity}
+		echo " * ${FilterCatalina5xx}" | sed 's/\[\[:space:\]\]/ /g' >> ${FileSeismoErrorsDensity}
+		echo -e "~Events Counter and Density (events per min):\n" >> ${FileSeismoErrorsDensity}
+		echo -e "xxx 3xx 4xx 5xx ep" >> ${FileSeismoErrorsDensity}
 	
 		if (( isDateIso == 1 )); then #--DateTime Stamp: [12/Feb/2026:08:59:58 -0400], ts_part1: [12/Feb/2026:08:59:58, ts_part2: -0400]
 			grep -Eh "${LeadingDateRegexSlash}" ${LogNames} |
-			awk -v slch="\\" -v destFile="${SeismoErrorsDensity}" \
+			awk -v slch="\\" -v destFile="${FileSeismoErrorsDensity}" \
 			-v p0="$keyWord00" \
 			-v p1="$keyWord01" \
 			-v p2="$keyWord02" \
@@ -258,23 +262,23 @@ if (( skipSystemLog == 0 )); then
 	#			iso_date=$(convert_apache_nginx_date_to_iso "${ts_part1} ${ts_part2}")
 	#			log_time="${ts_part1#*:}" #Extract time 08:59:58
 	#			echo "${iso_date} ${log_time} ${rest}"
-	#		done | date_range_full | sort | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdSys" "*" >> "${SeismoErrorsDensity}"
+	#		done | date_range_full | sort | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdSys" "*" >> "${FileSeismoErrorsDensity}"
 	#		#--Move this line up
 	#		}' > /dev/null
 	
 	
 	#--This is possible replacement for the code above. TODO: Separate 300/400/500
-	#		INITIAL_LOGS=$(grep -Eh "${LeadingDateRegexSlash}" ${LogNames})
+	#		CACHE_LogsRecords=$(grep -Eh "${LeadingDateRegexSlash}" ${LogNames})
 	#		join -a1 -a2 -e "" -o '0,1.2,2.2' \
-	#			<(echo "${INITIAL_LOGS}" | grep -E "${FilterHomeNoise}" | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdHome" ".") \
-	#			<(echo "${INITIAL_LOGS}" | grep -E "${FilterHomeBlend}" | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdHome" "*") |
-	#		date_range_full | sort >> "${SeismoErrorsDensity}"
+	#			<(echo "${CACHE_LogsRecords}" | grep -E "${FilterHomeNoise}" | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdHome" ".") \
+	#			<(echo "${CACHE_LogsRecords}" | grep -E "${FilterHomeBlend}" | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdHome" "*") |
+	#		date_range_full | sort >> "${FileSeismoErrorsDensity}"
 	
 		elif (( isDateIso == 2 )); then #--DateTime Stamp: 12-May-2026 09:24:06.999
 			grep -Eh "${LeadingDateRegexDash}" ${LogNames} | grep -E ${FilterCatalinaXxx} | while read -r date_str time_str rest; do
 				iso_date=$(convert_java_date_to_iso "${date_str}") 
 				echo "${iso_date} ${time_str} ${rest}"
-				done | date_range_full | sort | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdSys" "*" >> ${SeismoErrorsDensity}
+				done | date_range_full | sort | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdSys" "*" >> ${FileSeismoErrorsDensity}
 		fi
 	
 	
@@ -284,7 +288,7 @@ if (( skipSystemLog == 0 )); then
 		echo -e "\n~SYS logs ERRORS EXCERPT in range from: ${RangeHeadDate} ${RangeHeadTime} to: ${RangeTailDate} ${RangeTailTime}:${LogNames// /\\n}\n" >> ${SeismoSysLogsErrorsExcerpt}
 		grep -Eh ${LeadingDateRegexSlash} ${LogNames} | grep -E ${FilterCatalinaXxx} >> ${SeismoSysLogsErrorsExcerpt}
 	else
-		echo "~No access to INSTALL logs at: ${APP_INST}, or logs in range not found." >> ${SeismoErrorsDensity}
+		echo "~No access to INSTALL logs at: ${APP_INST}, or logs in range not found." >> ${FileSeismoErrorsDensity}
 	fi
 fi #--skipSystemLog
 
@@ -331,24 +335,24 @@ done
 
 #echo "~~~Parsing HOME logs..." #Debug/Verbose
 if [[ "${#LogNamesArr[@]}" -gt 0 ]]; then
-	echo -e "\n~HOME logs in range from: ${RangeHeadDate} ${RangeHeadTime} to: ${RangeTailDate} ${RangeTailTime}:${lstOfHomeLogFiles}" >> ${SeismoErrorsDensity}
-	echo "~Chart Legend: [(*) Clogging, (.) Other Errors], Filters detailes:" >> ${SeismoErrorsDensity}
-	echo " * ${FilterHomeBlend}" | sed 's/\[\[:space:\]\]/ /g' >> ${SeismoErrorsDensity}
-	echo " . ${FilterHomeNoise}" | sed 's/\[\[:space:\]\]/ /g' >> ${SeismoErrorsDensity}
-	echo -e "~Events Density (events per min):\n" >> ${SeismoErrorsDensity}
+	echo -e "\n~HOME logs in range from: ${RangeHeadDate} ${RangeHeadTime} to: ${RangeTailDate} ${RangeTailTime}:${lstOfHomeLogFiles}" >> ${FileSeismoErrorsDensity}
+	echo "~Chart Legend: [(*) Clogging, (.) Other Errors], Filters detailes:" >> ${FileSeismoErrorsDensity}
+	echo " * ${FilterHomeBlend}" | sed 's/\[\[:space:\]\]/ /g' >> ${FileSeismoErrorsDensity}
+	echo " . ${FilterHomeNoise}" | sed 's/\[\[:space:\]\]/ /g' >> ${FileSeismoErrorsDensity}
+	echo -e "~Events Density (events per min):\n" >> ${FileSeismoErrorsDensity}
 
-	INITIAL_LOGS=$(grep -Eh "${LeadingIsoDateRegex}" ${LogNames} | date_range_full) #Capture the base filtered logs in RAM
+	CACHE_LogsRecords=$(grep -Eh "${LeadingIsoDateRegex}" ${LogNames} | grep -vE "${FilterLog4jExcludeLevels}" | date_range_full) #Capture the base filtered logs in RAM
 	#--Line-by-line horizontal merge using subshell process substitution, #index 0: YYYY-MM-DD_HH:mm (e.g: 2026-05-16_14:06)
 	join -a1 -a2 -e "" -o '0,1.2,2.2' \
-		<(echo "${INITIAL_LOGS}" | grep -E "${FilterHomeBlend}" | grep -v "${FilterHomeNoise}" | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdHome" "*") \
-		<(echo "${INITIAL_LOGS}" | grep -E "${FilterHomeNoise}" | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdHome" ".") |
-	sort >> ${SeismoErrorsDensity}
+		<(echo "${CACHE_LogsRecords}" | grep -E "${FilterHomeBlend}" | grep -v "${FilterHomeNoise}" | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdHome" "*") \
+		<(echo "${CACHE_LogsRecords}" | grep -E "${FilterHomeNoise}" | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdHome" ".") |
+	sort >> ${FileSeismoErrorsDensity}
 
 	#--Save all error lines
 	echo -e "\n~HOME logs ERRORS EXCERPT in range from ${RangeHeadDate} ${RangeHeadTime} to ${RangeTailDate} ${RangeTailTime}:\n${lstOfHomeLogFiles}\n" >> ${SeismoHomeLogsErrorsExcerpt}
-	grep -Eh ${LeadingIsoDateRegex} ${LogNames} | date_range_full | grep -E "${FilterHomeNoise}|${FilterHomeBlend}" | sort >> ${SeismoHomeLogsErrorsExcerpt}
+	grep -Eh ${LeadingIsoDateRegex} ${LogNames} | date_range_full | grep -vE "${FilterLog4jExcludeLevels}" | grep -E "${FilterHomeNoise}|${FilterHomeBlend}" | sort >> ${SeismoHomeLogsErrorsExcerpt}
 else
-	echo "~No access to HOME logs at: ${APP_HOME}, or logs in range not found." >> ${SeismoErrorsDensity}
+	echo "~No access to HOME logs at: ${APP_HOME}, or logs in range not found." >> ${FileSeismoErrorsDensity}
 fi
 
 elapsed=$(( ($(date +%s%N) - start_time) / 1000000000 )); min=$(( elapsed / 60 )); sec=$(( elapsed % 60 ))
