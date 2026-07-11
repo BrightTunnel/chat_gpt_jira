@@ -271,7 +271,6 @@ if (( skipSystemLog == 0 )); then
 	#		#--Move this line up
 	#		}' > /dev/null
 	
-	
 	#--This is possible replacement for the code above. TODO: Separate 300/400/500
 	#		CACHE_LogsRecords=$(grep -Eh "${LeadingDateRegexSlash}" ${SysLogNames})
 	#		join -a1 -a2 -e "" -o '0,1.2,2.2' \
@@ -285,8 +284,6 @@ if (( skipSystemLog == 0 )); then
 				echo "${iso_date} ${time_str} ${rest}"
 				done | date_range_full | sort | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdSys" "*" >> ${FileSeismoErrorsDensity}
 		fi
-	
-	
 		elapsed=$(( ($(date +%s%N) - start_time) / 1000000000 )); min=$(( elapsed / 60 )); sec=$(( elapsed % 60 ))
 		echo "~2.Elapsed ${min}:${sec}. Exctract and Save Access Log Error Entries to: " ${SeismoSysLogsErrorsExcerpt}
 		#--Exctract and Save Error Lines Only
@@ -315,7 +312,8 @@ for ((i=0; i<16; i++)); do
 		LAST_LINE=$(tac "${nextLogName}" | grep -m 1 "^[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}" | awk '{print $1,$2}' | cut -d',' -f1)
 		firstLineEpoch=$(date -d "$FIRST_LINE" +%s 2>/dev/null)
 		lastLineEpoch=$(date -d "$LAST_LINE" +%s 2>/dev/null)
-		timeSpanEpoch=$(( (lastLineEpoch - firstLineEpoch) / 3600 ))
+		#timeSpanEpoch=$(( (lastLineEpoch - firstLineEpoch) / 3600 )) #--Rounded Hours, use line below to add decimals
+		timeSpanEpoch=$(awk -v last="$lastLineEpoch" -v first="$firstLineEpoch" 'BEGIN {printf "%.1f", (last - first) / 3600}')
 		#--Check if dates fall within this file's range
 		if [[ ($firstLineEpoch -ge $RangeHeadEpoch && $firstLineEpoch -le $RangeTailEpoch) || ($lastLineEpoch -ge $RangeHeadEpoch && $lastLineEpoch -le $RangeTailEpoch) ||
 			($RangeHeadEpoch -ge $firstLineEpoch && $RangeHeadEpoch -le $lastLineEpoch) || ($RangeTailEpoch -ge $firstLineEpoch && $RangeTailEpoch -le $lastLineEpoch) ]]; then
@@ -380,7 +378,6 @@ echo -e "~HOME_LOGS_ALL_IN_TIME_RANGE_CLIP in range from ${XcrptHeadDateTime} to
 echo "" >> ${SeismoHomeLogsAllInTimeRange}
 grep -Eh ${LeadingIsoDateRegex} ${XcrptFromTheLog} | date_range_excerpt >> "${SeismoHomeLogsAllInTimeRange}"
 #grep -Eh ${LeadingIsoDateRegex} ${XcrptFromTheLog} | date_range_excerpt | sed 'G' >> "${SeismoHomeLogsAllInTimeRange}" #With Extra \n
-
 
 #--Script execution time
 elapsed=$(( ($(date +%s%N) - start_time) / 1000000000 )); min=$(( elapsed / 60 )); sec=$(( elapsed % 60 ))
