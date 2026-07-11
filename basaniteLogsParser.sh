@@ -117,7 +117,6 @@ keywordsMap["Mix"]="has[[:space:]]failed|Failed[[:space:]]to[[:space:]]delete|Uh
 keywordsMap["NoiseCSSErrorListener"]="csskit.antlr4.CSSErrorListener" #--Fixed in new version of DC Confl 
 keywordsMap["NoiseClusterTimeout"]="Timeout[[:space:]]while[[:space:]]publishing[[:space:]]event[[:space:]]to[[:space:]]cluster"
 
-
 FilterDistilledForDots="${keywordsMap["NoiseClusterTimeout"]}"
 #FilterLog4jExcludeLevels="$^" #--Uncomment to Allow all Log4j Levels 
 FilterLog4jExcludeLevels="${keywordsMap["Log4jLogExcludeLevels"]}" #--Allow all except listed Log4j Levels
@@ -186,7 +185,6 @@ date_range_full() {
 date_range_excerpt() {
 	awk -v start="$XcrptHeadDateTime" -v end="$XcrptTailDateTime" '$1 " " $2 >= start && $1 " " $2 <= end' "$@"
 }
-
 
 if (( skipSystemLog == 0 )); then
 	#--SYS TOMCAT INSTALL_LOG. Collect List of the Log Files in range.
