@@ -12,11 +12,12 @@ if [ ! -d "$SM_REPORTS_DIR" ]; then #Check if the directory does NOT exist
 	mkdir -p "$SM_REPORTS_DIR"
 fi
 dtstamp=$(date +"%Y%m%d_%H%M")
+NODE=$(hostname -s)
 FileSeismoErrorsDensity="${SM_REPORTS_DIR}/seismoErrorsDensity_${dtstamp}.log"
 SeismoSysLogsErrorsExcerpt="${SM_REPORTS_DIR}/seismoSysLogsErrorsExcerpt_${dtstamp}.log"
 SeismoHomeLogsErrorsExcerpt="${SM_REPORTS_DIR}/seismoHomeLogsErrorsExcerpt_${dtstamp}.log"
 SeismoHomeLogsAllInTimeRange="${SM_REPORTS_DIR}/seismoHomeLogsAllInTimeRange_${dtstamp}.log"
-SeismoHomeLogsOrigCompressed="${SM_REPORTS_DIR}/seismoHomeLogsOrigCompressed_${dtstamp}.tar.gz"
+SeismoHomeLogsOrig="${SM_REPORTS_DIR}/SeismoHomeLogsOrig_${NODE}_${dtstamp}.tar.gz"
 
 skipSystemLog=1 #--Skip slow (about 15 minutes) process
 isDateIso=1
@@ -361,7 +362,7 @@ elapsed=$(( ($(date +%s%N) - start_time) / 1000000000 )); min=$(( elapsed / 60 )
 echo "~4.Elapsed ${min}:${sec}. Compress Original Home logs..."
 
 #--compress/zip original logs
-tar -czvf ${SeismoHomeLogsOrigCompressed} ${HomeLogNames}
+tar -czvf ${SeismoHomeLogsOrig} ${HomeLogNames}
 
 elapsed=$(( ($(date +%s%N) - start_time) / 1000000000 )); min=$(( elapsed / 60 )); sec=$(( elapsed % 60 ))
 echo "~5.Elapsed ${min}:${sec}."
