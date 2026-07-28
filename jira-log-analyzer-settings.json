@@ -1,6 +1,6 @@
 {
 	"rem":"Time range",
-	"collectDateTimeStart":"2000-01-01 00:00:00", 
+	"collectDateTimeStart":"2026-01-01 00:00:00", 
 	"collectDateTimeEnd":"2026-12-31 23:59:59",
 
 	"atlassianAppLogFileName":"atlassian-jira.log",
