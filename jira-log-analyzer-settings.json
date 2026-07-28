@@ -15,22 +15,10 @@
 	"readAtlassianJiraLog":true,
 	"readSlowJqlLog":false,
 	
-	"rem":"TREE: Box_Windows",
-	"inDirJiraApplicationLogs":"C:/Users/USER/Atlassian/jsm54-standalone/logs",
-	"inDirJiraHomeLogs":"C:/Users/USER/Atlassian/JiraHomeApplicationData/log",
-	"inDirJiraApplicationLogs":"C:/tmp/log",
-	"inDirJiraHomeLogs":"C:/tmp/log",
-
 	"rem":"TREE: TD C:/Users/TAS1543/@docs/parser/jira-plus-log-analyzer",
 	"inDirJiraApplicationLogs":"C:/Users/TAS1543/@docs/parser/logs",
 	"inDirJiraHomeLogs":"C:/Users/TAS1543/@docs/parser/logs",
 	"outDirReports":"C:/Users/TAS1543/@docs/parser/out",
-
-	"rem":"TREE: Linux_LAB",
-	"inDirJiraApplicationLogs":"/media/user/Storage/lenovo-storage/@Mobile/@Wiki/Projects/@Java/@Jira/@Jira-sharing-pojo/jira-plus-log-analyzer/@extra/Jira Logs Samples",
-	"inDirJiraHomeLogs":"/media/user/Storage/lenovo-storage/@Mobile/@Wiki/Projects/@Java/@Jira/@Jira-sharing-pojo/jira-plus-log-analyzer/@extra/Jira Logs Samples/",
-	"inDirJiraHomeLogs":"/media/user/Storage/@jira_logs_copy/jira_home/log",
-	"outDirReports":"/media/user/Storage/lenovo-storage/tmp",
 
 	"useJiraDbSearchRequest":false,
 	"rem":"jdbc:postgresql://localhost:5432/jira",
@@ -47,16 +35,11 @@
 	"rankThresholdExecutionTimesSec": 0, "rem":"let all",
 	"rankThresholdBytesSent": 0, "rem":"let all",
 
-
 	"rem":"Thresholds for chart only, not limiting data collection. Detailed Jira Usage plot with Daily and User Account Ranks on 24 Hrs scale.",
 	"rem":"--Prod: Compressed 'Jira Load' Chart Filters, Calculate per User Per Day--",
 	"chartThresholdEvents": 10000, "rem":"10,000",
 	"chartThresholdExecutionTimesSec": 3600, "rem":"60 min",
 	"chartThresholdBytesSent": 20000000, "rem":"20 MB",
-	"rem":"--Lab",
-	"chartThresholdEvents": 0,
-	"chartThresholdExecutionTimesSec": 0,
-	"chartThresholdBytesSent": 0,
 	
 	"rem":"if 'collectIfAccountsAre' is not empty, report/spyon listed user's activities",
 	"collectIfAccountsAre":[],
