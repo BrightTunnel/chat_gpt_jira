@@ -17,7 +17,7 @@ FileSeismoErrorsDensity="${SM_REPORTS_DIR}/seismoErrorsDensity_${dtstamp}.log"
 SeismoSysLogsErrorsExcerpt="${SM_REPORTS_DIR}/seismoSysLogsErrorsExcerpt_${dtstamp}.log"
 SeismoHomeLogsErrorsExcerpt="${SM_REPORTS_DIR}/seismoHomeLogsErrorsExcerpt_${dtstamp}.log"
 SeismoHomeLogsAllInTimeRange="${SM_REPORTS_DIR}/seismoHomeLogsAllInTimeRange_${dtstamp}.log"
-SeismoHomeLogsOrig="${SM_REPORTS_DIR}/SeismoHomeLogsOrig_${NODE}_${dtstamp}.tar.gz"
+SeismoHomeLogsOrig="${SM_REPORTS_DIR}/seismoHomeLogsOrig_${NODE}_${dtstamp}.tar.gz"
 
 skipSystemLog=1 #--Skip slow (about 15 minutes) process
 isDateIso=1
@@ -44,8 +44,7 @@ if [[ "$choice" == "JIRA" ]]; then
 	APP_INST="/opt/atlassian/jira/install/logs/"
 	APP_HOME="/opt/atlassian/jira/home/log/"
 	CATALINA_LOG="${APP_INST}catalina." #catalina.2026-05-12.log
-	CATALINA_LOG="${APP_INST}access_log." #access_log.2026-05-12
-	APP_MAIN_LOG="${APP_HOME}atlassian-jira-perf.log"
+	CATALINA_LOG="${APP_INST}access_log." #access_log.2026-05-12, also check atlassian-jira-perf.log
 	APP_MAIN_LOG="${APP_HOME}atlassian-jira.log"
 	thresholdHome=10
 	compressRate=10
@@ -84,13 +83,13 @@ elif [[ "$choice" == "CONF_DBG" ]]; then
 	CATALINA_LOG=${2:-/home/user/atlassian-jira-software/logs/catalina.out}
 	CATALINA_LOG="${APP_INST}catalina."
 	CATALINA_LOG="${APP_INST}conf_access_log." #conf_access_log.2026-05-12.log
-	APP_MAIN_LOG=${1:-/home/user/atlassian-jira-home/log/atlassian-jira.log}
 	APP_MAIN_LOG="${APP_HOME}atlassian-jira.log"
 fi
+JIRA_SLOWJQL_LOG="${APP_HOME}atlassian-jira-slow-queries.log"
 #catalinaLogName="${CATALINA_LOG##*/}"
 #appLogName="${APP_MAIN_LOG##*/}"
 
-RangeHeadDate="2026-03-22"; RangeHeadTime="00:00"
+RangeHeadDate="2020-03-22"; RangeHeadTime="00:00"
 RangeTailDate="2026-07-23"; RangeTailTime="23:59"
 XcrptHeadDateTime="2026-03-08 16:33"
 XcrptTailDateTime="2026-03-08 16:35"
@@ -296,55 +295,59 @@ fi #--skipSystemLog
 #--HOME_LOG. Collect List of the Log Files in range.
 elapsed=$(( ($(date +%s%N) - start_time) / 1000000000 )); min=$(( elapsed / 60 )); sec=$(( elapsed % 60 ))
 echo "~3.Elapsed ${min}:${sec}. Find HOME logs in the range: ${RangeHeadDate}..${RangeTailDate}" #Debug/Verbose
-HomeLogNames=""
-HomeLogNamesArr=()
-lstOfHomeLogFiles=""
+
+HomeLogNamesString=""
+lstOfHomeLogFilesWithInfo=""
 is_range_found=0
-for ((i=0; i<16; i++)); do
-	nextLogName=${APP_MAIN_LOG}
-	if [[ i -gt 0 ]]; then
-		nextLogName+=".${i}"
-	fi
-	if [[ -f "${nextLogName}" ]]; then
-		#--Check if log file contains target dates range. Get first and last timestamp from file
-		FIRST_LINE=$(head -n 100 "${nextLogName}" | grep -m 1 "^[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}" | awk '{print $1,$2}' | cut -d',' -f1)
-		LAST_LINE=$(tac "${nextLogName}" | grep -m 1 "^[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}" | awk '{print $1,$2}' | cut -d',' -f1)
-		firstLineEpoch=$(date -d "$FIRST_LINE" +%s 2>/dev/null)
-		lastLineEpoch=$(date -d "$LAST_LINE" +%s 2>/dev/null)
-		#timeSpanEpoch=$(( (lastLineEpoch - firstLineEpoch) / 3600 )) #--Rounded Hours, use line below to add decimals
-		timeSpanEpoch=$(awk -v last="$lastLineEpoch" -v first="$firstLineEpoch" 'BEGIN {printf "%.1f", (last - first) / 3600}')
-		#--Check if dates fall within this file's range
-		if [[ ($firstLineEpoch -ge $RangeHeadEpoch && $firstLineEpoch -le $RangeTailEpoch) || ($lastLineEpoch -ge $RangeHeadEpoch && $lastLineEpoch -le $RangeTailEpoch) ||
-			($RangeHeadEpoch -ge $firstLineEpoch && $RangeHeadEpoch -le $lastLineEpoch) || ($RangeTailEpoch -ge $firstLineEpoch && $RangeTailEpoch -le $lastLineEpoch) ]]; then
-			is_range_found=1
-			HomeLogNamesArr+=(${nextLogName})
-			#Conat log file names, separate file names by space
-			if [ -n "$HomeLogNames" ]; then
-				HomeLogNames+=" "
-			fi
-			HomeLogNames+="${nextLogName}"
-			lstOfHomeLogFiles+="\n${nextLogName}\t[${FIRST_LINE}..${LAST_LINE}] ${timeSpanEpoch} hrs"
-			echo -e "InTheRange: ${nextLogName} * ${FIRST_LINE} - ${LAST_LINE}" #Debug/Verbose
-		elif [[ ${is_range_found} -eq 1 ]]; then
-			echo -e "OutOfRange: ${nextLogName}   ${FIRST_LINE} - ${LAST_LINE}" #Debug/Verbose
-			#break
-		else
-			echo -e "NotInRgYet: ${nextLogName}   ${FIRST_LINE} - ${LAST_LINE}" #Debug/Verbose
+
+chain_logfile_names() {
+	local logtypename="$1"
+	for ((i=0; i<16; i++)); do
+		nextLogName=${logtypename}
+		if [[ i -gt 0 ]]; then
+			nextLogName+=".${i}"
 		fi
-	else
-		echo "FileNotFnd: ${nextLogName}" #Debug/Verbose
-	fi
-done
+		if [[ -f "${nextLogName}" ]]; then
+			#--Check if log file contains target dates range. Get first and last timestamp from file
+			FIRST_LINE=$(head -n 100 "${nextLogName}" | grep -m 1 "^[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}" | awk '{print $1,$2}' | cut -d',' -f1)
+			LAST_LINE=$(tac "${nextLogName}" | grep -m 1 "^[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}" | awk '{print $1,$2}' | cut -d',' -f1)
+			firstLineEpoch=$(date -d "$FIRST_LINE" +%s 2>/dev/null)
+			lastLineEpoch=$(date -d "$LAST_LINE" +%s 2>/dev/null)
+			#timeSpanEpoch=$(( (lastLineEpoch - firstLineEpoch) / 3600 )) #--Rounded Hours, use line below to add decimals
+			timeSpanEpoch=$(awk -v last="$lastLineEpoch" -v first="$firstLineEpoch" 'BEGIN {printf "%.1f", (last - first) / 3600}')
+			#--Check if dates fall within this file's range
+			if [[ ($firstLineEpoch -ge $RangeHeadEpoch && $firstLineEpoch -le $RangeTailEpoch) || ($lastLineEpoch -ge $RangeHeadEpoch && $lastLineEpoch -le $RangeTailEpoch) ||
+				($RangeHeadEpoch -ge $firstLineEpoch && $RangeHeadEpoch -le $lastLineEpoch) || ($RangeTailEpoch -ge $firstLineEpoch && $RangeTailEpoch -le $lastLineEpoch) ]]; then
+				is_range_found=1
+				#Conat log file names, separate file names by space
+				if [ -n "$HomeLogNamesString" ]; then
+					HomeLogNamesString+=" "
+				fi
+				HomeLogNamesString+="${nextLogName}"
+				lstOfHomeLogFilesWithInfo+="\n${nextLogName}\t[${FIRST_LINE}..${LAST_LINE}] ${timeSpanEpoch} hrs"
+				echo -e "InTheRange: ${nextLogName} * ${FIRST_LINE} - ${LAST_LINE}" >/dev/tty #Debug/Verbose
+			elif [[ ${is_range_found} -eq 1 ]]; then
+				echo -e "OutOfRange: ${nextLogName}   ${FIRST_LINE} - ${LAST_LINE}" >/dev/tty #Debug/Verbose
+			else
+				echo -e "NotInRgYet: ${nextLogName}   ${FIRST_LINE} - ${LAST_LINE}" >/dev/tty #Debug/Verbose
+			fi
+		else
+			echo "FileNotFnd: ${nextLogName}" >/dev/tty #Debug/Verbose
+		fi
+	done
+}
+chain_logfile_names "$APP_MAIN_LOG"
+chain_logfile_names "$JIRA_SLOWJQL_LOG"
 
 #echo "~~~Parsing HOME logs..." #Debug/Verbose
-if [[ "${#HomeLogNamesArr[@]}" -gt 0 ]]; then
-	echo -e "\n~HOME logs in range from: ${RangeHeadDate} ${RangeHeadTime} to: ${RangeTailDate} ${RangeTailTime}:${lstOfHomeLogFiles}" >> ${FileSeismoErrorsDensity}
+if [[ -n $HomeLogNamesString ]]; then
+	echo -e "\n~HOME logs in range from: ${RangeHeadDate} ${RangeHeadTime} to: ${RangeTailDate} ${RangeTailTime}:${lstOfHomeLogFilesWithInfo}" >> ${FileSeismoErrorsDensity}
 	echo "~Chart Legend: [(*) Clogging, (.) Other Errors], Filters detailes:" >> ${FileSeismoErrorsDensity}
 	echo " * ${FilterHomeBlend}" | sed 's/\[\[:space:\]\]/ /g' >> ${FileSeismoErrorsDensity}
 	echo " . ${FilterDistilledForDots}" | sed 's/\[\[:space:\]\]/ /g' >> ${FileSeismoErrorsDensity}
 	echo -e "~Errors Density (errors per min):\n" >> ${FileSeismoErrorsDensity}
 
-	CACHE_LogsRecords=$(grep -Eh "${LeadingIsoDateRegex}" ${HomeLogNames} | grep -vE "${FilterLog4jExcludeLevels}" | date_range_full) #Capture the base filtered logs in RAM
+	CACHE_LogsRecords=$(grep -Eh "${LeadingIsoDateRegex}" ${HomeLogNamesString} | grep -vE "${FilterLog4jExcludeLevels}" | date_range_full) #Capture the base filtered logs in RAM
 	#--Line-by-line horizontal merge using subshell process substitution, #index 0: YYYY-MM-DD_HH:mm (e.g: 2026-05-16_14:06)
 	join -a1 -a2 -e "" -o '0,1.2,2.2' \
 		<(echo "${CACHE_LogsRecords}" | grep -E "${FilterHomeBlend}" | grep -v "${FilterDistilledForDots}" | cut -c 1-16 | uniq -c | print_seismographFullLine "${compressRate}" "$thresholdHome" "*") \
@@ -352,8 +355,8 @@ if [[ "${#HomeLogNamesArr[@]}" -gt 0 ]]; then
 	sort >> ${FileSeismoErrorsDensity}
 
 	#--Save all error lines
-	echo -e "\n~HOME logs ERRORS EXCERPT in range from ${RangeHeadDate} ${RangeHeadTime} to ${RangeTailDate} ${RangeTailTime}:\n${lstOfHomeLogFiles}\n" >> ${SeismoHomeLogsErrorsExcerpt}
-	grep -Eh ${LeadingIsoDateRegex} ${HomeLogNames} | date_range_full | grep -vE "${FilterLog4jExcludeLevels}" | grep -E "${FilterDistilledForDots}|${FilterHomeBlend}" | sort >> ${SeismoHomeLogsErrorsExcerpt}
+	echo -e "\n~HOME logs ERRORS EXCERPT in range from ${RangeHeadDate} ${RangeHeadTime} to ${RangeTailDate} ${RangeTailTime}:\n${lstOfHomeLogFilesWithInfo}\n" >> ${SeismoHomeLogsErrorsExcerpt}
+	grep -Eh ${LeadingIsoDateRegex} ${HomeLogNamesString} | date_range_full | grep -vE "${FilterLog4jExcludeLevels}" | grep -E "${FilterDistilledForDots}|${FilterHomeBlend}" | sort >> ${SeismoHomeLogsErrorsExcerpt}
 else
 	echo "~No access to HOME logs at: ${APP_HOME}, or logs in range not found." >> ${FileSeismoErrorsDensity}
 fi
@@ -362,7 +365,7 @@ elapsed=$(( ($(date +%s%N) - start_time) / 1000000000 )); min=$(( elapsed / 60 )
 echo "~4.Elapsed ${min}:${sec}. Compress Original Home logs..."
 
 #--compress/zip original logs
-tar -czvf ${SeismoHomeLogsOrig} ${HomeLogNames}
+tar -czvf ${SeismoHomeLogsOrig} ${HomeLogNamesString}
 
 elapsed=$(( ($(date +%s%N) - start_time) / 1000000000 )); min=$(( elapsed / 60 )); sec=$(( elapsed % 60 ))
 echo "~5.Elapsed ${min}:${sec}."
