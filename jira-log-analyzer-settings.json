@@ -1,1 +1,1013 @@
+package jira_log_analyzer;
+
+import java.awt.BasicStroke;
+import java.awt.Color;
+import java.awt.Font;
+import java.awt.FontMetrics;
+import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.FilenameFilter;
+import java.io.IOException;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Map.Entry;
+import java.util.TreeMap;
+
+import javax.imageio.ImageIO;
+
+import pojo.ModelJiraDBase;
+import pojo.PojoJiraLogJql;
+import pojo.PojoJiraLogRowData;
+import pojo.PojoJsonSystemSettingsFile;
+import reports.Reports;
+import seismo.UtilsCompressLogDataAndSaveToDbOrCsv;
+import seismo.UtilsJqlUsageReport;
+import serviceForLogParser.ConstantsOfJiraLogs;
+import serviceForLogParser.RaiseAlert;
+
+import jiraPojoObjects.PojoSearchRequest;
+import utilsSanitizeHtmlXmlJsonEcodeEncrypt.UrlPercentEncoding;
+
+public class EpLogAnalyzer {
+	// ~~ Enumerators
+	public enum EnumReportKind {
+		JiraLog(1), AccessLog(2), SlowQuery(3), CatalinaLog(4), EMailInLog(5), EMailOutLog(6), AtlassianJiraPerfLog(7);
+
+		private final int repCode;
+
+		private EnumReportKind(int repCode) {
+			this.repCode = repCode;
+		}
+
+		static EnumReportKind getKindName(int code) {
+			for (EnumReportKind repKind : EnumReportKind.values()) {
+				// System.out.println(repKind + " " + repKind.getRepKindCode());
+				if (repKind.getRepKindCode() == code) {
+					return repKind;
+				}
+			}
+			return null;
+		}
+
+		public int getRepKindCode() {
+			return this.repCode;
+		}
+	}
+
+	public enum EnumSeverity {
+		// ~~ TRACE, DEBUG, INFO, WARN, ERROR, FATAL. There is no 'SEVERE' level
+		TRACE(1), DEBUG(2), INFO(3), WARN(4), ERROR(5), FATAL(6), SEVERE(7);
+
+		private final int repCode;
+
+		private EnumSeverity(int repCode) {
+			this.repCode = repCode;
+		}
+
+		public int getRepKindCode() {
+			return this.repCode;
+		}
+
+	}
+
+	public enum EnumGuiRankType {
+		GUIRANK_ALL(0), GUIRANK_ERR(1), GUIRANK_SLOWQRYUSER(2), GUIRANK_USER(3);
+
+		private final int repCode;
+
+		private EnumGuiRankType(int repCode) {
+			this.repCode = repCode;
+		}
+
+		public int getrankTypeCode() {
+			return this.repCode;
+		}
+	}
+
+	public enum EnumMaskParameters {
+		P0(0B0), P1(0B1), P2(0B10), P4(0B100), P8(0B1000), P16(0B10000), P32(0B100000), P64(0B1000000);
+
+		private final int parCode;
+
+		private EnumMaskParameters(int parCode) {
+			this.parCode = parCode;
+		}
+
+		public int getParameterCode() {
+			return this.parCode;
+		}
+	}
+
+	/// ~~ Main initial log records collection:
+	TreeMap<String, TreeMap<Long, TreeMap<Long, PojoJiraLogRowData>>> DictGroupByTypeDateCollected = new TreeMap<String, TreeMap<Long, TreeMap<Long, PojoJiraLogRowData>>>();
+	/// ~~ Key 1 USER String Type Sorting/Grouping key0 = localadmin /rest/wrm/2.0/resources-" 000003s
+	/// ~~ Key 2 DAY Long Date (no Time) Grouping key1 = 1665360000000 ~~ Oct 10 2022 00:00:00, Milliseconds since Unix Epoch rounded to the Day (will hold all ranks for this day)
+	/// ~~ Key 3 TIME Long Milliseconds -- Date and Time DataPoint key2 = 1665452549000 ~~ Oct 11 2022 01:42:29 - DataPoint of the each Rank
+
+	// ~~ Re-Mapped Main initial log records collection:
+	private TreeMap<Long, TreeMap<String, TreeMap<Long, PojoJiraLogRowData>>> DictGroupByDateTypeMapped = new TreeMap<Long, TreeMap<String, TreeMap<Long, PojoJiraLogRowData>>>();
+	/// ~~ Key 1 Long Date (no Time) Grouping key0={1634601600000} -- DAYS -- Grouping by Day
+	/// ~~ Key 2 String Sorting/Grouping key1={#JiraLog.INFO} -- USERS -- (ranks inside the Day Group)
+	/// ~~ Key 3 Long Date and Time DataPoint key2={1634648274340} -- TIME Data points of the User's Rank
+
+	/// ~~ Days -- User Account Dictionary, too keep user account rank's data: [rank label, User name, bytes transmitted, time used, mas, min values per rank, ...]]
+	/// private TreeMap<Long, TreeMap<String, PojoJiraLogRowData>> DictUserAccountRanks = new TreeMap<Long, TreeMap<String, PojoJiraLogRowData>>();
+	/// ~~ Key 1 Long Date (no Time) Grouping key0={1634601600000} -- DAYS -- Grouping by Day
+	/// ~~ Key 2 String Sorting/Grouping key1={#JiraLog.INFO} -- USERS -- (ranks inside the Day Group)
+
+	/// ~~ Full JQL set
+	TreeMap<Long, TreeMap<String, TreeMap<Long, PojoJiraLogJql>>> dictJql = new TreeMap<Long, TreeMap<String, TreeMap<Long, PojoJiraLogJql>>>();
+	/// ~~ Key 1 Long Date (no Time) Grouping key0={1634601600000} -- DAYS -- Grouping by Day
+	/// ~~ Key 2 String Full JQL Line
+	/// ~~ Key 3 TIME Long Milliseconds -- Date and Time DataPoint key2 = 1665452549000 ~~ Oct 11 2022 01:42:29 - DataPoint of the each Rank
+
+	/// ~~ Database Hash:
+	public TreeMap<String, PojoSearchRequest> DictJiraDbTableSearchRequest = new TreeMap<String, PojoSearchRequest>();
+
+	public static PojoJsonSystemSettingsFile SysSetngs;
+
+	UtilsLogsSys utilsLogsSys = new UtilsLogsSys();
+	UtilsLogsParsing utilsLogsParsing = new UtilsLogsParsing();
+
+	final public static String AtlassianJiraAccessLogFileName = "access_log"; // access_log.yyyy-mm-dd, e.g.: 'access_log.2021-10-29'
+	final public static String AtlassianJiraCatalinaLogFileName = "catalina."; // 'catalina.2021-10-29.log'
+	String AtlassianAppLogFileName = null; // "atlassian-jira.log" Default value will be updated later from jira-log-analyzer-settings.json
+
+	final private String AtlassianJiraSlowQueriesLogFileName = "atlassian-jira-slow-queries"; // > 400 ms
+	final private DateTimeFormatter formatterCompact = DateTimeFormatter.ofPattern("MMM d, yy HH:mm");
+	final private DateTimeFormatter formatterCompactDate = DateTimeFormatter.ofPattern("MMM d, yy");
+	final private int shiftXRightPxl = 256; // ~~ Shift left margin to the right (room for names)
+	final private int imgWidth = 1600;
+	final private int imgHeight = 50000; // ~~ 100,000 barely works
+	final private int graphYRankStepSize = 16;
+	final private int maxShapeHightPixels = 1 * graphYRankStepSize - 2; // ~~ Fixed hard-coded value - limiting the size of the biggest circle on the screen, in pixels
+	final private double maxTopSummaryRankShapeHightScale = 1.9; // * maxShapeHightPixels
+	final private String rankKeyOfCompressedDataBytesSent = "BYTES SENT";
+	final private String rankKeyOfCompressedDataExecutionTime = "EXEC TIME MIN";
+	final private int tuneBytesSentHeightMultiplier = 2;
+
+	public int rankWidthMm; // ~~ default: combine data for a day in one graph
+	public static int rankTicksCount; // ~~ fixed number per given graph parameters, used to draw ticks on the Ranks
+	int xRatioPixelPerTick;
+	LocalDateTime localDateStart;
+	LocalDateTime localDateEnd;
+	private String filePrefixDate;
+	private BufferedImage bi;
+	private Graphics2D g2d;
+	private boolean _newDayRanks;
+	private boolean _firstTimeInTheRank;
+	private int graphYRankPosition;
+	private double rankHrsCount;
+	private boolean prevUserHadDataToReport;// = false;
+	private boolean printToConsole = false;
+	private final String prefFont = "Leelawadee UI"; // Gisha
+	private StringBuilder collectChartRanksLabels = new StringBuilder();
+	private StringBuilder collectChartRanksLabel = new StringBuilder();
+	private Long _maxBytesSentPerAllRanksPerTicks = 0L;
+	private Long _maxExecutionTimePerAllRanksPerTicks = 0L;
+	public static boolean DEBUG_isTestServer = false; // ~~Prod
+
+	private void readJiraLogsAndBuildGraph() {
+		if (printToConsole) {
+			System.out.println("*********** Access log ***********");
+		}
+		DictGroupByTypeDateCollected = new TreeMap<String, TreeMap<Long, TreeMap<Long, PojoJiraLogRowData>>>();
+		ParseJiraAndAccessLogs parseJiraAndAccessLogs = new ParseJiraAndAccessLogs(this);
+		ParseSlowQueriesLog parseSlowQueriesLog = new ParseSlowQueriesLog(this);
+
+		// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// ~~ Read 'atlassian-jira.log' files for errors ~~
+		AtlassianAppLogFileName = SysSetngs.getAtlassianAppLogFileName(); // e.g. "atlassian-jira.log";
+		if (SysSetngs.isReadAtlassianJiraLog()) {
+			File _f1 = new File(SysSetngs.getInDirJiraHomeLogs()); // ~~ Creates a new File instance by converting the given pathname
+			// string into an abstract pathname
+			FilenameFilter _fr1 = new FilenameFilter() {
+				@Override
+				public boolean accept(File f, String name) {
+					return name.startsWith(AtlassianAppLogFileName);
+				}
+			};
+			String[] _fls1 = _f1.list(_fr1); // ~~ Populates the array with names of files and directories
+			if (_fls1 != null) {
+				parseJiraAndAccessLogs.extractDataFromJiraLogFiles(_fls1, EnumReportKind.JiraLog.getRepKindCode());
+			} else {
+				System.out.println("Error 1: No access to " + _f1);
+			}
+		}
+
+		// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// ~~ Read 'access_log.yyyy-mm-dd', for users api calls ~~
+		if (SysSetngs.isReadAccessLog()) {
+			File _f2 = new File(SysSetngs.getInDirJiraApplicationLogs());
+			FilenameFilter _fr2 = new FilenameFilter() {
+				@Override
+				public boolean accept(File f, String name) {
+					return name.startsWith(AtlassianJiraAccessLogFileName); // ~~ e.g.: C:/Program Files/Atlassian/Jira/logs/access_log.2021-03-27
+				}
+			};
+			String[] _fls2 = _f2.list(_fr2);
+			if (_fls2 != null) {
+				parseJiraAndAccessLogs.extractDataFromJiraLogFiles(_fls2, EnumReportKind.AccessLog.getRepKindCode());
+			} else {
+				System.out.println("Error 2: No access to " + _f2);
+			}
+		}
+
+		// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// ~~ Read 'atlassian-jira-slow-queries.log' ~~
+		if (SysSetngs.isReadSlowJqlLog()) {
+			File _f3 = new File(SysSetngs.getInDirJiraHomeLogs());
+			FilenameFilter _fr3 = new FilenameFilter() {
+				@Override
+				public boolean accept(File f, String name) {
+					return name.startsWith(AtlassianJiraSlowQueriesLogFileName);
+				}
+			};
+			String[] _fls3 = _f3.list(_fr3);
+			if (_fls3 != null) {
+				parseSlowQueriesLog.extractSlowQueries(_fls3);
+			} else {
+				System.out.println("Error 3: No access to " + _f3);
+			}
+		}
+
+		// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// ~~ Read 'catalina.2021-10-29.log' ~~
+		if (SysSetngs.isReadCatalinaLog()) {
+			File _f4 = new File(SysSetngs.getInDirJiraApplicationLogs());
+			FilenameFilter _fr4 = new FilenameFilter() {
+				@Override
+				public boolean accept(File f, String name) {
+					return name.startsWith(AtlassianJiraCatalinaLogFileName); // ~~ e.g.: C:/Program Files/Atlassian/Jira/logs/catalina.2021-10-29.log
+				}
+			};
+			String[] _fls4 = _f4.list(_fr4);
+			if (_fls4 != null) {
+				parseJiraAndAccessLogs.extractDataFromJiraLogFiles(_fls4, EnumReportKind.CatalinaLog.getRepKindCode());
+			} else {
+				System.out.println("Error 4: No access to " + _f4);
+			}
+		}
+
+		// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// ~~ Finally, after all requested data from all Jira Logs is collected: ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		if (DictGroupByTypeDateCollected != null && DictGroupByTypeDateCollected.size() > 0) {
+
+			/// System.out.println("~~~Finally, after all requested data from all Jira Logs is collected, Calculating Maximums...");
+			/// ~~ UNUSED_calcMaxEventsCountPerSpot(); //~~ calculate Maximums
+
+			// ~~ Remap, rearrange collected data:
+			/// System.out.println("~~~Working: Remapping DictGroupByTypeDateCollected");
+			DictGroupByDateTypeMapped = utilsLogsParsing.reMap(DictGroupByTypeDateCollected);
+
+			/// System.out.println("~~~Working: Calculating eSumOfAllEventsExecutionTimePerRank...");
+			utilsLogsParsing.calculateSumOfAllResourcesUsedPerUserAccountRank(DictGroupByDateTypeMapped);
+
+			// ~~ Collect, compress and Persist Jira Logs Data in DBase OR csv file:
+			UtilsCompressLogDataAndSaveToDbOrCsv utilsCompressLogDataAndSaveToDbOrCsv = new UtilsCompressLogDataAndSaveToDbOrCsv(SysSetngs);
+			if (SysSetngs.isSeismoUseJiraDbToPersistData()) {
+				/// System.out.println("~~~Working: Collect And Persist Jira Logs Data to DataBase");
+			} else {
+				/// System.out.println("~~~Working: Collect And Persist Jira Logs Data to CSV File");
+			}
+
+			utilsCompressLogDataAndSaveToDbOrCsv.compactAndPersistJiraLogsDataToDBaseOrCsv(DictGroupByDateTypeMapped);
+
+			/// ~~ SLOW JQL Collection
+			UtilsJqlUsageReport utilsJqlUsageReport = new UtilsJqlUsageReport(this);
+			utilsJqlUsageReport.printJqlUsage(dictJql);
+
+			// ~~ Build Graph:
+			System.out.print("\n~~Building Graph...");
+			buildGraphByRanks();
+
+		} else {
+			System.out.println("No data found for that period in the folder: " + SysSetngs.getInDirJiraApplicationLogs());
+		}
+
+	}
+
+	private void buildGraphByRanks() {
+		// System.out.println("Working on: buildGraphByRanks");
+		graphYRankPosition = 0;
+		if (DictGroupByDateTypeMapped != null && DictGroupByDateTypeMapped.size() > 0) {
+			String[] _pgRankTimeLineCountEvents = new String[rankTicksCount]; // ~~ Array includes all time ticks (empty and containing events count > 0)
+			String[] _pgRankTimeLineByteSent = new String[rankTicksCount]; // ~~ Array includes all time ticks (empty and containing bytes sent > 0)
+			// ~~ Print the header (time axis)
+			int _hourTick = 0;
+			int _tickPrev;
+			int _tickNext;
+			Long numberOfItemsPerTickTimeSpot;
+			int byteSentPerTickTimeSpot;
+			// EnumGuiRankType _rt;
+			for (int ii = 0; ii < rankTicksCount; ii++) {
+				if (ii * SysSetngs.getTickSizeMinutes() % 60 == 0) {
+					_hourTick++;
+					_pgRankTimeLineCountEvents[ii] = String.format("%02d", _hourTick);
+					_pgRankTimeLineByteSent[ii] = String.format("%02d", 0);
+				} else {
+					_pgRankTimeLineCountEvents[ii] = "' ";
+					_pgRankTimeLineByteSent[ii] = "' ";
+				}
+				if (printToConsole) {
+					// System.out.print(_pgRankTimeLineCountEvents[ii]);
+					System.out.print(_pgRankTimeLineByteSent[ii]);
+				}
+			}
+			if (printToConsole) {
+				System.out.println();
+			}
+			prevUserHadDataToReport = false;
+			initiateDrawing();
+			graphYRankPosition += 2; // ~~ Add empty lines to separate Header
+			Iterator<Entry<Long, TreeMap<String, TreeMap<Long, PojoJiraLogRowData>>>> iterRank0Day = DictGroupByDateTypeMapped.entrySet().iterator();
+			while (iterRank0Day.hasNext()) { // ~~ Loop Days ~~
+				// ~~ Next DAY ~~
+				_newDayRanks = true;
+				if (prevUserHadDataToReport) {// ~~ Do not add this gap, if User had no volume of data
+					prevUserHadDataToReport = false;
+					graphYRankPosition += 2; // ~~ Add empty lines to separate Ranks
+				}
+				Entry<Long, TreeMap<String, TreeMap<Long, PojoJiraLogRowData>>> _ranksSectionDay = iterRank0Day.next();
+				Long httpBytesSentSumPerDay = 0L;
+				Long httpExecutionTimeSumPerDay = 0L;
+				if (_ranksSectionDay.getValue().firstEntry() != null && _ranksSectionDay.getValue().firstEntry().getValue().firstEntry() != null) {
+					httpBytesSentSumPerDay = _ranksSectionDay.getValue().firstEntry().getValue().firstEntry().getValue().getBytesSentPerDayAllRanks();
+					httpExecutionTimeSumPerDay = _ranksSectionDay.getValue().firstEntry().getValue().firstEntry().getValue().getExecutionTimePerDayAllRanksMSec();
+				}
+				if (printToConsole) {
+					// System.out.println("~#Debug: Rank: " + _ranksSectionDay.getKey() + " " + bytesSentPerDayAllRanks);
+				}
+				LocalDateTime ldt = Instant.ofEpochMilli(_ranksSectionDay.getKey()).atZone(ZoneId.of("UTC")).toLocalDateTime();
+				// LocalDateTime ldt = Instant.ofEpochMilli(_rankDay.getKey()).atZone(ZoneId.systemDefault()).toLocalDateTime();
+				LocalDate ld = ldt.toLocalDate();
+				Font font = new Font(prefFont, Font.BOLD, 13);
+				g2d.setFont(font);
+				g2d.setColor(Color.white);
+				g2d.fillRect(2, (graphYRankPosition + 1) * graphYRankStepSize - 4 - 18, 128, 18); // ~~ Erase skipped empty day
+				g2d.setColor(Color.gray);
+				g2d.drawString(formatterCompact.format(ldt), 6, (graphYRankPosition + 1) * graphYRankStepSize - 4 - 4);
+
+				/// ~~~ User Accounts Report Header:
+				collectChartRanksLabels.append("\nOn " + formatterCompactDate.format(ldt)); // ~~ Date Section Header
+				if (_ranksSectionDay.getValue().firstEntry() != null && _ranksSectionDay.getValue().firstEntry().getValue().firstEntry() != null) {
+					collectChartRanksLabels.append(", Jira transmitted a total of " + String.format("%,d", _ranksSectionDay.getValue().firstEntry().getValue().firstEntry().getValue().getBytesSentPerDayAllRanks() / 1024) + " kB of data");
+					collectChartRanksLabels.append(" with an overall execution time of " + String.format("%,d", _ranksSectionDay.getValue().firstEntry().getValue().firstEntry().getValue().getExecutionTimePerDayAllRanksMSec() / 1000) + " seconds.");
+				}
+				collectChartRanksLabels.append("\nIdentification Key and Rank Data\tUser/Account" + "\tEvents" + "\tByte" + "\tSec" + "\tFirst Event" + "\tLast Event" + "\tJQL" + "\n "); // ~~ Report Header
+
+				// ~~ Summary rank for all users /errors for the day rank ~~
+				Long dayRankSummary[][] = utilsLogsParsing.calculateDayRankSummaryPerTickTimeFrame(_ranksSectionDay.getValue(), _ranksSectionDay.getKey());
+				int indexDayEvents = 0; // ~~ Subarray of all events for a day
+				int indexDayErrors = 1; // ~~ Subarray of all errors for a day
+				int indexDayBytesSent = 2;
+				int indexDayHttpTime = 3; // ~~ Subarray of all http request execution time
+				Long _maxCountPerRank = 0L;
+				Long _maxBytesSentPerRank = 0L;
+				Long _maxExecutionTimePerRank = 0L;
+				for (int ii = 0; ii < dayRankSummary[indexDayEvents].length; ii++) {
+					if (_maxCountPerRank < dayRankSummary[indexDayEvents][ii]) {
+						_maxCountPerRank = dayRankSummary[indexDayEvents][ii];
+					}
+					if (_maxBytesSentPerRank < dayRankSummary[indexDayBytesSent][ii]) {
+						_maxBytesSentPerRank = dayRankSummary[indexDayBytesSent][ii];
+					}
+					if (_maxExecutionTimePerRank < dayRankSummary[indexDayHttpTime][ii]) {
+						_maxExecutionTimePerRank = dayRankSummary[indexDayHttpTime][ii];
+					}
+				}
+				// ~~~~~~~~~~~~~~~~~~~ SINGLE TOP COMPRESSED RANK PER DAY 'ENTRIES' of All log events 'dayRankSummary[indexDayEvents]' ~~~~~~~~~~~~~~~~~~~~~
+				// graphYRankPosition++; // ~~ Next Rank after Day header before hours scale and INFO line
+				Long _cntSummOfAllEventsPerRank = 0L;
+				for (int ii = 0; ii < rankTicksCount; ii++) {
+					_cntSummOfAllEventsPerRank += dayRankSummary[indexDayEvents][ii];
+				}
+				_firstTimeInTheRank = true;
+				for (int ii = 0; ii < rankTicksCount; ii++) {
+					drawTheDataPoint(ii, 0, graphYRankPosition + 2, _cntSummOfAllEventsPerRank, 0L, 0L, 0L, dayRankSummary[indexDayEvents][ii], _maxCountPerRank, "ENTRIES", _firstTimeInTheRank, true, false, null);
+				}
+				graphYRankPosition++; // ~~ Set Pointer to the Next rank
+
+				// ~~~~~~~~~~~~~~~~~~~ SINGLE TOP COMPRESSED RANK PER DAY 'ERROR' of All Errors only log events 'dayRankSummary[indexDayErrors]' ~~~~~~~~~~~~~~~~~~~~~
+				_cntSummOfAllEventsPerRank = 0L;
+				for (int ii = 0; ii < rankTicksCount; ii++) {
+					_cntSummOfAllEventsPerRank += dayRankSummary[indexDayErrors][ii];
+				}
+				_firstTimeInTheRank = true;
+				for (int ii = 0; ii < rankTicksCount; ii++) {
+					drawTheDataPoint(ii, 0, graphYRankPosition + 2, _cntSummOfAllEventsPerRank, 0L, 0L, 0L, dayRankSummary[indexDayErrors][ii], _maxCountPerRank, "ERRORS", _firstTimeInTheRank, true, true, null);
+				}
+				graphYRankPosition++; // ~~ Next rank after General 'INFO' first line rank
+
+				// ~~~~~~~~~~~~~~~~~~~ SINGLE TOP COMPRESSED RANK PER DAY 'HTTP BYTES SENT' ~~~~~~~~~~~~~~~~~~~~~
+				for (int ii = 0; ii < rankTicksCount; ii++) {
+					if (_maxBytesSentPerAllRanksPerTicks < dayRankSummary[indexDayBytesSent][ii]) {
+						_maxBytesSentPerAllRanksPerTicks = dayRankSummary[indexDayBytesSent][ii];
+					}
+				}
+				_firstTimeInTheRank = true;
+				for (int ii = 0; ii < rankTicksCount; ii++) {
+					drawTheDataPoint(ii, 0, graphYRankPosition + 2, httpBytesSentSumPerDay, 0L, 0L, 0L, dayRankSummary[indexDayBytesSent][ii], _maxBytesSentPerRank, rankKeyOfCompressedDataBytesSent, _firstTimeInTheRank, true, false, null);
+				}
+				graphYRankPosition++; // ~~ Next rank after General 'INFO' first line rank
+
+				// ~~~~~~~~~~~~~~~~~~~ SINGLE TOP COMPRESSED RANK PER DAY 'HTTP EXECUTION TIME' ~~~~~~~~~~~~~~~~~~~~~
+				for (int ii = 0; ii < rankTicksCount; ii++) {
+					if (_maxExecutionTimePerAllRanksPerTicks < dayRankSummary[indexDayHttpTime][ii]) {
+						_maxExecutionTimePerAllRanksPerTicks = dayRankSummary[indexDayHttpTime][ii];
+					}
+				}
+				_firstTimeInTheRank = true;
+				for (int ii = 0; ii < rankTicksCount; ii++) {
+					drawTheDataPoint(ii, 0, graphYRankPosition + 2, httpExecutionTimeSumPerDay, 0L, 0L, 0L, dayRankSummary[indexDayHttpTime][ii], _maxExecutionTimePerRank, rankKeyOfCompressedDataExecutionTime, _firstTimeInTheRank, true, false, null);
+				}
+
+				// ~~~~~~~~~~~~~~~~~~~ TOP SECTION OF COMPRESSED RANKS 'Substring found filter' ~~~~~~~~~~~~~~~~~~~~~
+				if (SysSetngs.isJiraLogsIsCollectIfStringToFindIsFound()) {
+					HashSet<String> hsTop = SysSetngs.getCollectIfTheseSubstringsAreFound();
+					if (hsTop != null) {
+						hsTop.forEach(it -> {
+							// ~~ Add this subset of compressed ranks to the main 'DictGroupByDateTypeMapped'
+							utilsLogsParsing.addSectionOfCompressedFilteredRanksToDayRank(_ranksSectionDay.getValue(), it);
+						});
+					}
+				}
+				// ~~~~~~~~~~~~~~~~~~~ TOP SECTION OF COMPRESSED RANKS 'This Accounts found' ~~~~~~~~~~~~~~~~~~~~~
+				if (SysSetngs.isJiraLogsIsCollectIfStringToFindIsFound()) {
+					HashSet<String> hsTop = SysSetngs.getCollectIfAccountsAre();
+					if (hsTop != null) {
+						hsTop.forEach(it -> {
+							// ~~ Add this subset of compressed ranks to the main 'DictGroupByDateTypeMapped'
+							utilsLogsParsing.addSectionOfCompressedRanksWithAccountsToDayRank(_ranksSectionDay.getValue(), it);
+						});
+					}
+				}
+
+				// ~~~~~~~~~~~~~~~~~~~ Rest of the REGULAR USER ACCOUNT RANKS -- Filtered events, containing search line ~~
+				// ~~ All regular ranks of the Day Group ~~
+				graphYRankPosition++; // ~~ Next Rank after Error
+				Iterator<Entry<String, TreeMap<Long, PojoJiraLogRowData>>> _usersAccountsIterator = _ranksSectionDay.getValue().entrySet().iterator();
+				// ~~ Loop all ranks of the Day section
+				while (_usersAccountsIterator.hasNext()) {
+					Entry<String, TreeMap<Long, PojoJiraLogRowData>> usersAccount = _usersAccountsIterator.next();
+
+					/// ~~ Business Rules Filter ~~
+					if (usersAccount != null) {
+						TreeMap<Long, PojoJiraLogRowData> usersAccountDayDataPoints = usersAccount.getValue();
+						if (usersAccountDayDataPoints != null && !usersAccountDayDataPoints.isEmpty() //
+								&& (!usersAccount.getKey().contains("" + ConstantsOfJiraLogs.HTTPStatusCodeEQ200Success)) // ~~ Exclude OK 200
+								&& ((usersAccountDayDataPoints.size() >= SysSetngs.getRankThresholdEvents()) //
+										|| usersAccountDayDataPoints.firstEntry().getValue().getBytesSentPerDayPerRank() != null && usersAccountDayDataPoints.firstEntry().getValue().getBytesSentPerDayPerRank() >= SysSetngs.getRankThresholdBytesSent() //
+										|| usersAccountDayDataPoints.firstEntry().getValue().getExecutionTimePerDayPerRankMSec() != null && usersAccountDayDataPoints.firstEntry().getValue().getExecutionTimePerDayPerRankMSec() / 1000.0 >= SysSetngs.getRankThresholdExecutionTimesSec() //
+								)) {
+							boolean isThisRankOfErrors = utilsLogsParsing.ifSeverityLevelIsAnError(usersAccount.getKey()); // ~~ always show/keep the ranks with ERRORS
+							boolean isThisHasSubString = utilsLogsParsing.isShowStringsWhichHasSubString(usersAccount.getKey()); // ~~ always show/keep the ranks with the key starting with '#has'
+							if (isThisRankOfErrors || isThisHasSubString || !SysSetngs.isDrawCompressedAndHandPickedRanksOnly() || SysSetngs.isDrawCompressedAndHandPickedRanksAndRelatedDetailes()) {
+								if (true) {
+									boolean useThisAccountLine = true;
+									if (SysSetngs.isDrawCompressedAndHandPickedRanksOnly() && SysSetngs.isDrawCompressedAndHandPickedRanksAndRelatedDetailes()) {
+										HashSet<String> hmTop = SysSetngs.getCollectIfAccountsAre();
+										if (hmTop != null && hmTop.contains(usersAccountDayDataPoints.firstEntry().getValue().getUserNameFull())) {
+											useThisAccountLine = true;
+										} else {
+											useThisAccountLine = false;
+										}
+									}
+									if (useThisAccountLine) {
+										prevUserHadDataToReport = true;
+										graphYRankPosition++; // ~~ Next Rank
+										Iterator<Entry<Long, PojoJiraLogRowData>> _userDataRankIter = usersAccountDayDataPoints.entrySet().iterator();
+										// ~~ Reset (erase) graph holder
+										for (int ii = 0; ii < rankTicksCount; ii++) {
+											_pgRankTimeLineCountEvents[ii] = "' ";
+											_pgRankTimeLineByteSent[ii] = "' ";
+										}
+										numberOfItemsPerTickTimeSpot = 0L; // ~~ Confirmed first value must be 0.
+										byteSentPerTickTimeSpot = 0; // ~~ Confirmed first value must be 0.
+										Long maxNumberOfItemsPerTickTimeSpotAtThisRank = 0L;
+										int maxBytesSentPerTickTimeSpotAtThisRank = 0;
+										_tickPrev = -1;
+										Long _rankEventsExecutionTimeSumAllEventsPerRankmSec = 0L;
+										// Long _bytesSent = 0L;
+										Long _bytesSentPerDayPerRank = usersAccountDayDataPoints.firstEntry().getValue().getBytesSentPerDayPerRank();
+										Long _executionTimeSumPerRank = usersAccountDayDataPoints.firstEntry().getValue().getExecutionTimePerDayPerRankMSec();
+										// ~~ Iterate all log entries in a Single Rank and build RankTimeLine ~~
+										TreeMap<Integer, PojoJiraLogRowData> ticksHolder = new TreeMap<Integer, PojoJiraLogRowData>();
+										// ~~ Loop one User/Account rank data
+										while (_userDataRankIter.hasNext()) {
+											Entry<Long, PojoJiraLogRowData> _userKeyDataPoint = _userDataRankIter.next();
+											PojoJiraLogRowData _userDataPoint = _userKeyDataPoint.getValue();
+											_rankEventsExecutionTimeSumAllEventsPerRankmSec = _executionTimeSumPerRank; // ~~ All events grouped by ExecutionTime, so this assigned the same value few times in this loop
+											// _bytesSent = _userDataPoint.getBytesSent(); //~~ All events grouped by ExecutionTime, so this assigned the same value few times in this loop
+											// _bytesSentPerDayPerRank = _userDataPoint.getBytesSentSumPerRank(); //~~ All events grouped by ExecutionTime, so this assigned the same value few times in this loop -- OBSOLETE
+											// JiraLog(1), AccessLog(2), SlowQuery(3), CatalinaLog(4), EMailInLog(5), EMailOutLog(6);
+											if (SysSetngs.isDrawAtlassianJiraLog() && _userDataPoint.getLogKind() == EnumReportKind.JiraLog.getRepKindCode() || //
+													SysSetngs.isDrawAccessLog() && _userDataPoint.getLogKind() == EnumReportKind.AccessLog.getRepKindCode() || //
+													SysSetngs.isDrawSlowJqlLog() && _userDataPoint.getLogKind() == EnumReportKind.SlowQuery.getRepKindCode() || //
+													SysSetngs.isDrawCatalinaLog() && _userDataPoint.getLogKind() == EnumReportKind.CatalinaLog.getRepKindCode()) {
+												// ~~ Calculate the _tickNextLong index based on Event DataPoint Time
+												Long _tickNextLong = (_userDataPoint.getLocalDateTimeMsec() - _ranksSectionDay.getKey()) / 1000 / 60 / SysSetngs.getTickSizeMinutes();
+												_tickNext = _tickNextLong.intValue();
+												if (_tickPrev == -1) {
+													_tickPrev = _tickNext;
+												}
+												if (_tickPrev == _tickNext) {
+													numberOfItemsPerTickTimeSpot++;
+													if (_userDataPoint.getBytesSentDataPoint() != null) {
+														byteSentPerTickTimeSpot += _userDataPoint.getBytesSentDataPoint();
+													}
+													if (maxNumberOfItemsPerTickTimeSpotAtThisRank < numberOfItemsPerTickTimeSpot) {
+														maxNumberOfItemsPerTickTimeSpotAtThisRank = numberOfItemsPerTickTimeSpot;
+													}
+													if (maxBytesSentPerTickTimeSpotAtThisRank < byteSentPerTickTimeSpot) {
+														maxBytesSentPerTickTimeSpotAtThisRank = byteSentPerTickTimeSpot;
+													}
+												} else {
+													// ~~ This is new _tickNextLong index, so complete saving/drawing dataPoint for events of Previous Tick
+													_tickPrev = _tickNext;
+													numberOfItemsPerTickTimeSpot = 1L;
+													if (_userDataPoint.getBytesSentDataPoint() != null) {
+														byteSentPerTickTimeSpot = _userDataPoint.getBytesSentDataPoint().intValue();
+													} else {
+														byteSentPerTickTimeSpot = 0;
+													}
+												}
+												if (!ticksHolder.containsKey(_tickNext)) {
+													PojoJiraLogRowData _pHldr = new PojoJiraLogRowData();
+													_pHldr.setExecutionTimePerChartTickMSec(_userDataPoint.getExecutionTimeDataPointMSec());
+													ticksHolder.put(_tickNext, _pHldr);
+													_pHldr = null;
+												} else {
+													PojoJiraLogRowData _pHldr = ticksHolder.get(_tickNext);
+													Long _ms = 0L;
+													if (_pHldr.getExecutionTimePerChartTickMSec() != null) {
+														_ms = _pHldr.getExecutionTimePerChartTickMSec();
+													}
+													if (_userDataPoint.getExecutionTimeDataPointMSec() != null) {
+														_ms += _userDataPoint.getExecutionTimeDataPointMSec();
+													}
+													_pHldr.setExecutionTimePerChartTickMSec(_ms);
+													_pHldr = null;
+												}
+												_pgRankTimeLineCountEvents[_tickNext] = numberOfItemsPerTickTimeSpot + "'"; // rowsExact.getSeverityGraphChar();
+												_pgRankTimeLineByteSent[_tickNext] = byteSentPerTickTimeSpot + "'"; // rowsExact.getSeverityGraphChar();
+											}
+										}
+										_firstTimeInTheRank = true;
+										Color thisLineColor = UtilsLogsChart.getNextRgbColour(graphYRankPosition, SysSetngs.isSystemUseSingleColour());
+
+										// ~~ Unpack ticks array and draw the rank
+										for (int ii = 0; ii < rankTicksCount; ii++) {
+											// ~~ Extract number of events per tick
+											Long _numberOfEventsPerTick = 0L;
+											String _extractNumberOfEventsPerTick = _pgRankTimeLineCountEvents[ii].substring(0, _pgRankTimeLineCountEvents[ii].length() - 1);
+											if (_extractNumberOfEventsPerTick != null && _extractNumberOfEventsPerTick.length() > 0) {
+												_extractNumberOfEventsPerTick = _extractNumberOfEventsPerTick.replace("'", "");
+												if (_extractNumberOfEventsPerTick.length() > 0) {
+													_numberOfEventsPerTick = Long.parseLong(_extractNumberOfEventsPerTick);
+												}
+											}
+											// ~~ Extract bytes sent sum per tick
+											Long _byteSentPerTick = 0L;
+											String _extractBytesSentPerTick = "";
+											if (_pgRankTimeLineByteSent[ii] != null) {
+												_extractBytesSentPerTick = _pgRankTimeLineByteSent[ii].substring(0, _pgRankTimeLineByteSent[ii].length() - 1);
+											}
+											if (_extractBytesSentPerTick != null && _extractBytesSentPerTick.length() > 0) {
+												_extractBytesSentPerTick = _extractBytesSentPerTick.replace("'", "");
+												if (_extractBytesSentPerTick.length() > 0) {
+													_byteSentPerTick = Long.parseLong(_extractBytesSentPerTick);
+												}
+											}
+
+											Long _candleEventsExecutionTimeMilliSec = 0L;
+											if (ticksHolder.get(ii) != null) {
+												_candleEventsExecutionTimeMilliSec = ticksHolder.get(ii).getExecutionTimePerChartTickMSec();
+											}
+											// ~~print number of events per tick
+											drawTheDataPoint(ii, 0, graphYRankPosition + 1, (long) usersAccountDayDataPoints.size(), _rankEventsExecutionTimeSumAllEventsPerRankmSec, _candleEventsExecutionTimeMilliSec, _bytesSentPerDayPerRank, _numberOfEventsPerTick,
+													maxNumberOfItemsPerTickTimeSpotAtThisRank, usersAccount.getKey(), _firstTimeInTheRank, false, isThisRankOfErrors, thisLineColor);
+											if (SysSetngs.isDrawExtraRankBytesSentPerTick()) {
+												// ~~print 'bytes sent' sum per tick
+												drawTheDataPoint(ii, 2, graphYRankPosition + 1, (long) usersAccountDayDataPoints.size(), _rankEventsExecutionTimeSumAllEventsPerRankmSec, _candleEventsExecutionTimeMilliSec, _bytesSentPerDayPerRank, _byteSentPerTick, httpBytesSentSumPerDay,
+														usersAccount.getKey(), _firstTimeInTheRank, false, isThisRankOfErrors, thisLineColor);
+											}
+											if (printToConsole) {
+												System.out.print(_pgRankTimeLineCountEvents[ii]);
+											}
+										}
+									}
+								}
+							}
+							if (printToConsole) {
+								System.out.println();
+							}
+						}
+					}
+
+					/// ~~~ Built User Account Rank label and BAD ACTORS report
+					if (usersAccount.getValue().size() >= SysSetngs.getRankThresholdEvents() //
+							|| usersAccount.getValue().firstEntry() != null && usersAccount.getValue().firstEntry().getValue().getBytesSentPerDayPerRank() != null && usersAccount.getValue().firstEntry().getValue().getBytesSentPerDayPerRank() >= SysSetngs.getRankThresholdBytesSent() //
+							|| usersAccount.getValue().firstEntry() != null && usersAccount.getValue().firstEntry().getValue().getExecutionTimePerDayPerRankMSec() != null
+									&& usersAccount.getValue().firstEntry().getValue().getExecutionTimePerDayPerRankMSec() / 1000 >= SysSetngs.getRankThresholdExecutionTimesSec() //
+					) {
+						collectChartRanksLabels.append("'" + collectChartRanksLabel);
+						collectChartRanksLabels.append("\t'" + usersAccount.getValue().firstEntry().getValue().getUserNameCore());
+						collectChartRanksLabels.append("\t" + usersAccount.getValue().size()); // ~~ Count events / log entires per User Account this Day
+						if (usersAccount.getValue().firstEntry().getValue().getBytesSentPerDayPerRank() != null) {
+							collectChartRanksLabels.append("\t" + String.format("%,d", usersAccount.getValue().firstEntry().getValue().getBytesSentPerDayPerRank()));
+						}
+						if (usersAccount.getValue().firstEntry().getValue().getExecutionTimePerDayPerRankMSec() != null) {
+							collectChartRanksLabels.append("\t" + usersAccount.getValue().firstEntry().getValue().getExecutionTimePerDayPerRankMSec() / 1000);
+						}
+						collectChartRanksLabels.append("\t" + utilsLogsSys.formatDateTimeAsString(usersAccount.getValue().firstEntry().getValue().getUserAccountFirstEventThisDay()));
+						collectChartRanksLabels.append("\t" + utilsLogsSys.formatDateTimeAsString(usersAccount.getValue().firstEntry().getValue().getUserAccountLastEventThisDay()));
+						collectChartRanksLabels.append("\t" + UrlPercentEncoding.urlPercentEncoding(usersAccount.getValue().firstEntry().getValue().getJqlLuceneQueryOrHtmlParam()));
+						collectChartRanksLabels.append("\n ");
+					}
+					collectChartRanksLabel = new StringBuilder();
+				}
+			} // ~~ End of Loop Days ~~
+
+			/// ~~~ Save just built Drawing/Chat to the *.png file ~~~
+			String _graphFileName = " Chart";
+			/// System.out.println("~~~~At the end of buildGraphByRanks()--saveDrawing()");
+			saveDrawing(filePrefixDate + _graphFileName);
+		}
+	}
+
+	private Graphics2D initiateDrawing() {
+		// ~~ Constructs a BufferedImage of one of the predefined image types.
+		bi = new BufferedImage(imgWidth, imgHeight, BufferedImage.TYPE_INT_RGB);
+		// System.out.println("~~BufferedImage " + imgWidth * imgHeight); // ~~BufferedImage 0,080,000,000
+		// System.out.println("~~BufferedImage " + Integer.MAX_VALUE); // ~~BufferedImage 2,147,483,647
+
+		// ~~ Create a graphics which can be used to draw into the buffered image
+		g2d = bi.createGraphics();
+		// ~~ fill all the image with white
+		g2d.setColor(Color.white);
+		g2d.fillRect(0, 0, imgWidth, imgHeight);
+		setHeader();
+		return g2d;
+	}
+
+	private void drawTheDataPoint(int anX, int aXShift, int anY, Long anRankAllEventsCount, Long aRankEventsExecutionTimeSumAllEventsPerRankmSec, Long aCandleEventsExecutionTimeMilliSec, Long aBytesSentSumPerRank, Long aYValuePerTick, Long aMaxValuePerRank, String aKey,
+			boolean isFirstDataPointInTheRank, boolean aRankIsSummary, boolean isThisRankOfErrors, Color aLineClr) {
+		if (aYValuePerTick > 0) {
+			Font font;
+			Color rgb = null;
+			if (aBytesSentSumPerRank == null) {
+				aBytesSentSumPerRank = 0L;
+				// } else if (aBytesSentSumPerRank > 0) {
+				// System.out.println("~~77 " + aKey + " " + aBytesSentSumPerRank);
+			}
+
+			if (isFirstDataPointInTheRank) {
+				// ~~ Axis X ~~
+				g2d.setStroke(new BasicStroke(1));
+				g2d.setColor(Color.lightGray); // --Default color for low values below Thresholds
+				g2d.drawLine(0, anY * graphYRankStepSize, bi.getWidth(), anY * graphYRankStepSize);
+
+				// ~~~~~~~~~~~~ The rank's LABEL ~~~~~~~~~~~~
+				font = new Font(prefFont, Font.PLAIN, 11);
+				g2d.setFont(font);
+				FontMetrics fontMetrics = g2d.getFontMetrics();
+				int stringHeight = fontMetrics.getAscent();
+				if (aRankIsSummary) {
+					Long _valueForLabel = anRankAllEventsCount;
+					if (isThisRankOfErrors) {
+						g2d.setColor(Color.red);
+					} else if (aKey.compareTo(rankKeyOfCompressedDataBytesSent) == 0) {
+						g2d.setColor(Color.green.darker());
+					} else if (aKey.compareTo(rankKeyOfCompressedDataExecutionTime) == 0) {
+						g2d.setColor(Color.magenta.darker());
+						_valueForLabel = _valueForLabel / 1000 / 60;
+					} else {
+						g2d.setColor(Color.blue);
+					}
+					g2d.drawString(aKey + ": " + String.format("%,d", _valueForLabel), 4, anY * graphYRankStepSize - stringHeight / 2 + 2); // The rank Label (User name)
+				} else {
+					if (isThisRankOfErrors) {
+						g2d.setColor(Color.red);
+					} else {
+						g2d.setColor(Color.gray);
+					}
+					// ~~ Check if I added number of events for different sort order and truncate it.
+					if (SysSetngs.isDrawCompressedAndHandPickedRanksOnly()) {
+						String[] chopped = aKey.split(" ");
+						try {
+							Long.parseLong(chopped[0]);
+							aKey = aKey.substring(chopped[0].length() + 1);
+						} catch (NumberFormatException e) {
+						}
+					}
+					double sumOfAllRankExecutionTimesMinutes = 0L;
+					if (aRankEventsExecutionTimeSumAllEventsPerRankmSec != null) {
+						sumOfAllRankExecutionTimesMinutes = aRankEventsExecutionTimeSumAllEventsPerRankmSec / 1000 / 60.0;
+					}
+					if (anRankAllEventsCount >= SysSetngs.getHighlightHeavyRanksWithNumberOfCallsPerDayMoreThan()) { // ~~ Threshold to Highlight ranks with more than number of calls
+						g2d.setColor(new Color(128, 0, 128)); // Purple
+					} else if (sumOfAllRankExecutionTimesMinutes >= SysSetngs.getHighlightHeavyRanksWithSumExecutionTimeGreaterThanMin()) { // ~~ Threshold to Highlight ranks with more than some minutes SUM execution time
+						g2d.setColor(Color.blue);
+					} else {
+						g2d.setColor(Color.green.darker());
+					}
+					String userAccountRankLabel = aKey + " *" + String.format("%,d", anRankAllEventsCount) + "=";
+					userAccountRankLabel += String.format("%,d", aBytesSentSumPerRank / 1024) + "kB";
+					userAccountRankLabel += "/" + String.format("%.2f", sumOfAllRankExecutionTimesMinutes) + "m";
+					// userAccountRankLabel += " " + aBytesSent; Do not show bytes here, in label per rank, show just 'aBytesSentSumPerRank'
+					g2d.drawString(userAccountRankLabel, 4, anY * graphYRankStepSize - stringHeight / 2 + 2); // The rank Label (e.g. User name)
+					collectChartRanksLabel.append("" + userAccountRankLabel);
+				}
+				// ~~~~~~~~~~~ Draw ticks and hours on x ~~ Do once per each day rank ~~~~~~~~~~
+				if (_newDayRanks) {
+					_newDayRanks = false;
+					// ~~ Print all 24 hours once per day ~~
+					for (int ii = 0; ii <= rankHrsCount; ii++) {
+						int x = ii * xRatioPixelPerTick * (60 / SysSetngs.getTickSizeMinutes()) + shiftXRightPxl;
+						font = new Font(prefFont, Font.PLAIN, 11);
+						g2d.setFont(font);
+						g2d.setColor(Color.black);
+						g2d.drawString(ii + "", x - 5, anY * graphYRankStepSize - stringHeight / 2 - 9);
+					}
+				}
+				if (_firstTimeInTheRank) {
+					_firstTimeInTheRank = false;
+					// ~~ Print all 24 hour ticks once per data rank (scale line for each rank) ~~
+					for (int ii = 0; ii <= rankHrsCount; ii++) {
+						int x = ii * xRatioPixelPerTick * (60 / SysSetngs.getTickSizeMinutes()) + shiftXRightPxl;
+						g2d.setColor(Color.gray.brighter());
+						g2d.drawLine(x, anY * graphYRankStepSize - 1, x, anY * graphYRankStepSize + 1); // ~~ a tiny hour tick
+					}
+				}
+			} // fi 'isFirstDataPointInTheRank'
+
+			if (aRankIsSummary) { // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ First rank of the day -- summary (candlesticks} ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+				g2d.setStroke(new BasicStroke(1));
+				if (isThisRankOfErrors) {
+					g2d.setColor(Color.red);
+				} else if (aKey.compareTo(rankKeyOfCompressedDataBytesSent) == 0) {
+					g2d.setColor(Color.green.darker());
+				} else if (aKey.compareTo(rankKeyOfCompressedDataExecutionTime) == 0) {
+					g2d.setColor(Color.magenta.darker());
+				} else {
+					g2d.setColor(Color.blue);
+				}
+				int _lcl = 2; // ~~ original design. (_lcl = 16 -- Extended horizontally to underline the error)
+				int _candleHight = (int) Math.round(maxTopSummaryRankShapeHightScale * (double) (maxShapeHightPixels * aYValuePerTick) / (double) aMaxValuePerRank);
+				if (_candleHight < 2) {
+					_candleHight = 2;
+				}
+				g2d.drawRoundRect(anX * xRatioPixelPerTick - _lcl / 2 - 2 + shiftXRightPxl + aXShift, (int) Math.round(anY * graphYRankStepSize - _candleHight), _lcl, _candleHight, _lcl, _lcl);
+
+			} else { // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Regular ranks ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+				if (isThisRankOfErrors) {
+					rgb = new Color(200, 0, 222);
+					g2d.setColor(rgb);
+				} else {
+					g2d.setColor(new Color(128, 16, 16)); // ~~ default color
+					if (aLineClr != null) {
+						g2d.setColor(aLineClr); // ~~ main massive data lines
+					}
+				}
+				// int _radius = (int) Math.round((double) maxShapeHightPixels * (Math.sqrt((double) anEventsCount / Math.PI) / Math.sqrt((double) aMaxRankValue / Math.PI)));
+				// if (_radius < 2) { _radius = 2;}
+				int _candleHight = (int) Math.round((double) (maxShapeHightPixels * aYValuePerTick) / (double) aMaxValuePerRank);
+				// System.out.println(anEventsCount + ": " + _candleHight);
+				if (_candleHight <= 0) { // ~~ anEventsCount == 1, so make it visible
+					_candleHight = 0; // ~ make it visible
+					// _candleHight = maxShapeHightPixels; //~~ Make Single event visible
+				} else if (_candleHight > maxShapeHightPixels) {
+					_candleHight = maxShapeHightPixels;
+				}
+				// ~~ main massive data lines ~~
+				int _candleWidth = 0; // ~~ the shape/candle width (1 pxl = 0)
+				_candleWidth = SysSetngs.getTickSizeMinutes() / 5 - 1; // ~~ for SysSetngs.getTickSizeMinutes() = 15 minutes, _lcl = 2;
+				int alterXShift = anY % 3; // ~~ Deviate the shift: [-1, 0, 1]
+				if (aCandleEventsExecutionTimeMilliSec != null && aCandleEventsExecutionTimeMilliSec > 1000 * 1) { // ~~ Longer than one second
+					_candleWidth = xRatioPixelPerTick * (int) (aCandleEventsExecutionTimeMilliSec / (1000L * 60L * SysSetngs.getTickSizeMinutes()));
+					alterXShift += _candleWidth;
+				}
+				// g2d.drawOval(anX * xRatioPixelPerTick - _radius + shiftXRightPxl, (int) Math.round(anY * graphYRankStepSize - _radius / 2), _radius, _radius);
+				if (_candleWidth > 4) { // ~~ Change the shape (rectangle) border line color for each blocks
+					Color thisLineColor = UtilsLogsChart.getNextRgbColour(anY, SysSetngs.isSystemUseSingleColour());
+					g2d.setColor(thisLineColor); // ~~ main massive data lines
+				}
+				if (aXShift > 0) { // ~~ If 'aXShift' > 0 - it's extra shaddow tick to show 'bytes sent', so regular logic may be slightly altered
+					// ~~ Since the maximum bytes sent is calculated per day (not per rank), we need to improve visiblilty of the shaddow ticks
+					_candleHight = (int) Math.round((double) (maxShapeHightPixels * aYValuePerTick) / (double) _maxBytesSentPerAllRanksPerTicks);
+					_candleHight = _candleHight * tuneBytesSentHeightMultiplier;
+					if (_candleHight > maxShapeHightPixels) {
+						_candleHight = maxShapeHightPixels;
+					}
+					// g2d.setColor(new Color(255, 32, 32)); //~~ color for bytes sent
+					// g2d.setColor(new Color(16, 16, 16)); //~~ color for bytes sent
+					g2d.setColor(new Color(0, 0, 0)); // ~~ color for bytes sent
+				}
+				if (false && _candleWidth > 4) {
+					g2d.fillRect(anX * xRatioPixelPerTick - _candleWidth + shiftXRightPxl + alterXShift, (int) Math.round(anY * graphYRankStepSize - _candleHight), _candleWidth, _candleHight);
+				} else {
+					g2d.drawRect(anX * xRatioPixelPerTick - _candleWidth + shiftXRightPxl + alterXShift + aXShift, (int) Math.round(anY * graphYRankStepSize - _candleHight), _candleWidth, _candleHight);
+				}
+			}
+		}
+	}
+
+	private void setHeader() {
+		// ~~ Add Drawing Header ~~
+		LocalDateTime now = LocalDateTime.now();
+		// String drawingHeader = "Updated on " + now.format(formatterCompact);
+		String drawingHeader = AtlassianAppLogFileName + " viewer";
+		Font font = new Font(prefFont, Font.BOLD, 16);
+		g2d.setFont(font);
+		FontMetrics fontMetrics = g2d.getFontMetrics();
+		g2d.setColor(Color.gray);
+		g2d.drawString(drawingHeader, 8, 16);
+	}
+
+	private void saveDrawing(String afl) {
+		// ~~ Disposes of this graphics context and releases any system resources that it's using.
+		g2d.dispose();
+		File file = new File(SysSetngs.getOutDirReports() + "/" + afl + ".png");
+		int graphYRankPositionShorten = 0;
+		if (imgWidth * (graphYRankPosition + 3) * graphYRankStepSize > Integer.MAX_VALUE) {
+			graphYRankPositionShorten = Integer.MAX_VALUE / (imgWidth * graphYRankStepSize) - 3 - 1;
+			graphYRankPosition = graphYRankPositionShorten;
+			System.err.println("~~To prevent RasterFormatException number of the Ranks decreased from " + graphYRankPosition + " to " + graphYRankPositionShorten);
+		}
+		try {
+			// (graphYRankPosition = 7911 + 3) * graphYRankStepSize = 16 = 126624
+			// y+height > this.minY + this.height = 50000
+			int hh = (graphYRankPosition + 3) * graphYRankStepSize;
+			int heigmax = Math.min(50000, hh);
+			if (heigmax < hh) {
+				System.err.println("Warning: image truncated");
+			}
+			BufferedImage dest = bi.getSubimage(0, 0, imgWidth, heigmax); // ~~ Crop to the actual used area
+			// BufferedImage dest = bi.getSubimage(0, 0, imgWidth, (graphYRankPosition + 3) * graphYRankStepSize); // ~~ Crop to the actual used area
+			// Exception in thread "main" java.awt.image.RasterFormatException: (y + height) is outside raster ~~ in prev line
+			// https://stackoverflow.com/questions/9089675/creating-huge-bufferedimage
+			// I believe this is a limitation of the Raster class. Width * Height needs to be less than Integer.MAX_VALUE
+			// http://docs.oracle.com/javase/7/docs/api/java/awt/image/Raster.html
+			// As a work around I'd probably split my BufferedImage into sections where width and height are both less than the square root of Integer.MAX_VALUE, so 46,340x46,340 max.
+			// UPDATE: It looks like the PNGJ Library at http://code.google.com/p/pngj/ was created for this purpose.
+			ImageIO.write(dest, "png", file);
+
+			System.out.print("\n~~Plot 'Jira usage' saved:\n" + file);
+
+		} catch (IOException e) {
+			System.err.println("~~ERR while imgWidth: " + imgWidth + ", graphYRankPosition: " + graphYRankPosition + ", graphYRankStepSize:" + graphYRankStepSize);
+			System.err.println("~~" + e.getMessage());
+			e.printStackTrace();
+			System.err.println("~~End of error");
+		}
+	}
+
+	private void wireFrame() {
+		long startTime = System.nanoTime();
+		if (utilsLogsSys.isTheFileFound("C:/@Tools/taskbar.reg")) { /// ~~ DEBUG Windows
+			DEBUG_isTestServer = true; /// ~~ DEBUG
+			System.out.println("~~LAB"); /// ~~ DEBUG
+		} else { /// ~~ DEBUG
+			DEBUG_isTestServer = false; /// ~~ DEBUG
+			System.out.println("~~PROD"); /// ~~ DEBUG
+		} /// ~~ DEBUG
+
+		UtilsLogsSys utilsLogsSys = new UtilsLogsSys();
+		SysSetngs = utilsLogsSys.getSysSettings("jira-log-analyzer-settings.json");
+
+		// est = 0L; // SysSetngs.getShiftHrs() * 3600L * 1000L;
+		filePrefixDate = utilsLogsSys.formatDateAsString(SysSetngs.getCollectDateTimeStart());
+		// ~~ Create Output Folder
+		SysSetngs.setOutDirReports(SysSetngs.getOutDirReports() + "/scan-" + filePrefixDate + "-" + utilsLogsSys.formatDateAsString(SysSetngs.getCollectDateTimeEnd()) + "");
+		new File(SysSetngs.getOutDirReports()).mkdirs();
+		// ~~ Make some calculaton to prepare chart settings
+		localDateStart = SysSetngs.getCollectDateTimeStart();
+		localDateEnd = SysSetngs.getCollectDateTimeEnd();
+		rankWidthMm = SysSetngs.getRankSizeHrs() * 60;
+		rankTicksCount = rankWidthMm / SysSetngs.getTickSizeMinutes();
+		rankHrsCount = rankWidthMm / 60;
+		double _xPixelPerTickDbl = (double) (imgWidth - shiftXRightPxl) / (double) rankTicksCount;
+		xRatioPixelPerTick = (int) Math.round(_xPixelPerTickDbl);
+		xRatioPixelPerTick--; // ~~ Subtract 1 pixel per tick to add some space on the right margin of the graph
+
+		// ~~ Conditional use of different jira logs
+		if (SysSetngs.isUseJiraDbSearchRequest()) {
+			ModelJiraDBase modelJiraDBase = new ModelJiraDBase(this);
+			modelJiraDBase.sqlSelectSearchrequest();
+		}
+
+		readJiraLogsAndBuildGraph();
+
+		/// ~~ Read/Populate SeismoGraphLegend for the first time
+		// UtilsDbSeismoGraphLegend utilsDbSeismoGraphLegend = new UtilsDbSeismoGraphLegend();
+		// utilsDbSeismoGraphLegend.readSavedToDBSeismoGraphLegend();
+
+		boolean isSaveReportsToTheFile = false; // ~~ Note: need database for that action
+		if (isSaveReportsToTheFile) {
+			Reports reports = new Reports();
+			SysSetngs.setReportAllAccessLogRecordsNotErrorsOnly(SysSetngs.isReportAllAccessLogRecordsNotErrorsOnly());
+			reports.saveAllCollectedDataReport(DictGroupByDateTypeMapped, SysSetngs, filePrefixDate);
+			reports.saveReportLogCombined(DictGroupByDateTypeMapped, SysSetngs, filePrefixDate);
+			SysSetngs.setReportAllAccessLogRecordsNotErrorsOnly(false);
+			reports.saveReportErrorsStat(DictGroupByTypeDateCollected, SysSetngs, filePrefixDate);
+			SysSetngs.setReportAllAccessLogRecordsNotErrorsOnly(true);
+			reports.saveReportErrorsStat(DictGroupByTypeDateCollected, SysSetngs, filePrefixDate);
+			// ~~ Save reports with grouped entries ~~ SysSetngs.setGroupMessagesOption(1);
+		}
+
+		/// ~~ Compact per User account Report
+		utilsLogsSys.saveChartLegendLabels(collectChartRanksLabels.toString(), SysSetngs, filePrefixDate);
+		/// ~~FYI only
+		long endTime = System.nanoTime();
+		double duration = (endTime - startTime) / 1000000 / 1000 / 60.0;
+		String formattedTime = String.format("%.2f", duration);
+		System.out.print("\nExecution time: " + formattedTime + " min"); /// ~~ DEBUG
+	}
+
+	private void UNUSED_calcMaxEventsCountPerSpot() {
+		Long _tckNext;
+		Long _tckPrev = -1L;
+		int UNUSED_numberOfItemsPerTimeSpot = 0;
+		int UNUSED_maxEventsCountPerSpot = 0; // ~~ Value found while collecting data
+		Iterator<Entry<String, TreeMap<Long, TreeMap<Long, PojoJiraLogRowData>>>> usersIter = DictGroupByTypeDateCollected.entrySet().iterator();
+		while (usersIter.hasNext()) {
+			Entry<String, TreeMap<Long, TreeMap<Long, PojoJiraLogRowData>>> usersKeyValue = usersIter.next();
+			Iterator<Entry<Long, TreeMap<Long, PojoJiraLogRowData>>> ranksIter = usersKeyValue.getValue().entrySet().iterator();
+			while (ranksIter.hasNext()) {
+				Entry<Long, TreeMap<Long, PojoJiraLogRowData>> rankKeyValue = ranksIter.next();
+				TreeMap<Long, PojoJiraLogRowData> _rankData = rankKeyValue.getValue();
+				UNUSED_numberOfItemsPerTimeSpot = 0;
+				// ~~ Iterate all log entries in the Rank
+				Iterator<Entry<Long, PojoJiraLogRowData>> _itemsKeyValue = _rankData.entrySet().iterator();
+				while (_itemsKeyValue.hasNext()) {
+					Entry<Long, PojoJiraLogRowData> _itemKeyValue = _itemsKeyValue.next();
+					PojoJiraLogRowData _itemValue = _itemKeyValue.getValue();
+					_tckNext = (_itemValue.getLocalDateTimeMsec() - rankKeyValue.getKey()) / 1000 / 60 / SysSetngs.getTickSizeMinutes();
+					if (_tckPrev == _tckNext) {
+						UNUSED_numberOfItemsPerTimeSpot++;
+					} else {
+						_tckPrev = _tckNext;
+						UNUSED_numberOfItemsPerTimeSpot = 1;
+					}
+				}
+				if (UNUSED_maxEventsCountPerSpot < UNUSED_numberOfItemsPerTimeSpot) {
+					UNUSED_maxEventsCountPerSpot = UNUSED_numberOfItemsPerTimeSpot;
+				}
+			}
+		}
+	}
+
+	private final void UNUSED_runLoop() {
+		int loopsOverall = Integer.MAX_VALUE;
+		while (loopsOverall-- > 0) {
+			// ~~ Loop ~~~
+
+			// ~~ Sleep ~~
+			try {
+				Thread.sleep(1000);
+			} catch (InterruptedException e) {
+			}
+		}
+	}
+
+	public static void main(String[] par) {
+		// ~~ run.bat:
+		// ~~ D:
+		// ~~ cd D:/base/
+		// ~~ "C:/Program Files/Atlassian/JIRA/jre/bin/java.exe" -jar D:/base/logger.jar
+		if (false) {
+			RaiseAlert ra = new RaiseAlert();
+			ra.sendAlert();
+		}
+
+		while (true) {
+			new EpLogAnalyzer().wireFrame();
+			System.out.print("\n~~Completed~~");
+			System.exit(0);
+			try {
+				Thread.sleep(1000 * 1);
+			} catch (InterruptedException ex) {
+			}
+		}
+		// System.out.println("*** Jira reports analysis completed ***");
+
+		// The rank is the number of calls for specific period of time.
+		// The radius of the ring reflects number of calls.
+		// filter External API calls
+		// find API endpoint requested http
+		// response time
+		// audit log
+		// http access log
+	}
+}
+
+///TODO include  && (_logDateTime.isAfter(ep.localDateStart) || _logDateTime.isEqual(ep.localDateStart)) //
 
