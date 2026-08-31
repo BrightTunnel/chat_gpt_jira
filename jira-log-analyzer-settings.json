@@ -1,1 +1,15 @@
 
+#--Disk Free (fast)
+	df -h
+	df -h /dir/inner_dir/
+	df -h | sort -hr -k 2 #--targets the 2nd column (Size).
+	df -h | sort -hr -k 5 #--Sort by Highest Usage Percentage
+
+#--Disk Used (Slow, folder sizes)
+	du -sh #Shows how much space one or more files or directories is using. -s option summarizes the space a directory is using
+	du -sh *
+	du -sh * 2>/dev/null #--To hide the "cannot read directory" or "Permission denied" error messages
+	du -sh * 2>/dev/null | sort -rh
+	#--If some folders are missing (they are deep inside hidden directories), change the * to a . to scan the entire current directory recursively, limit the depth so it remains readable:
+	du -h --max-depth=2 2>/dev/null | sort -rh
+
